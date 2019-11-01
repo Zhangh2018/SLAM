@@ -27,8 +27,7 @@ void Init::processFrames() {
     std::vector<std::vector<cv::DMatch>> matches;
 
     std::vector<cv::DMatch> goodMatches;
-    std::vector<cv::KeyPoint> pMatches1, pMatches2;
-    std::vector<cv::Point2f> nPMatches1, nPMatches2;
+    std::vector<cv::Point2f> pMatches1, pMatches2;
     cv::Mat T12, T21;
     std::vector<uchar> mask;
 
@@ -51,18 +50,14 @@ void Init::processFrames() {
 		   	const float ratio = 0.7;
 		   	if (matches[i][0].distance < ratio * matches[i][1].distance) {
 		    	goodMatches.push_back(matches[i][0]);
-                pMatches1.push_back(keypoints1[matches[i][0].queryIdx]);
-                pMatches2.push_back(keypoints2[matches[i][0].trainIdx]);
+                pMatches1.push_back(keypoints1[matches[i][0].queryIdx].pt);
+                pMatches2.push_back(keypoints2[matches[i][0].trainIdx].pt);
 		   	}
         }
         std::cout << "good matches: " << goodMatches.size() << std::endl;
 
-        nPMatches1.clear(); nPMatches2.clear();
-        normalize(pMatches1, nPMatches1, T12); 
-        normalize(pMatches2, nPMatches2, T21);
-
         mask.clear();
-        cv::Mat F = cv::findFundamentalMat(nPMatches1, nPMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
+        cv::Mat F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
         std::vector<cv::DMatch> temp;
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
