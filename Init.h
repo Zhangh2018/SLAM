@@ -8,11 +8,12 @@
 class Init {
 public:
     Init(cv::VideoCapture& cap, const int nfeatures, const int thold);
-    void ProcessFrames();
+    void processFrames();
 private:
-    void ExtractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
-    void DrawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints_1, std::vector<cv::KeyPoint>& keypoints_2, std::vector<cv::DMatch>& matches);
-    
+    void extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
+    void drawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints_1, std::vector<cv::KeyPoint>& keypoints_2, std::vector<cv::DMatch>& matches);
+    void normalize(const std::vector<cv::KeyPoint>& keypoints, std::vector<cv::Point2f>& normalizedPoints, cv::Mat& T);
+
     // video wrapper
     cv::VideoCapture cap;
 
