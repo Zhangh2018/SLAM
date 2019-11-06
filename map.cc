@@ -79,7 +79,7 @@ Map::Map() {
     ourShader = new Shader("camera.vs", "camera.fs");
 };
 
-void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
+void Map::run(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
 
     glEnable(GL_PROGRAM_POINT_SIZE);
     glEnable(GL_DEPTH_TEST);
@@ -101,7 +101,7 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
 	unsigned int instanceVBO;
 	glGenBuffers(1, &instanceVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * pose3d.size(), &pose3d.front(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(glm::mat4) * pose3d.size(), &pose3d.front(), GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
     
     unsigned int frustumBuffer, frustumArray;
@@ -117,11 +117,20 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
 	
 	glEnableVertexAttribArray(2);
     glBindBuffer(GL_ARRAY_BUFFER, instanceVBO); 
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)0);
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(sizeof(glm::vec4)));
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(2 * sizeof(glm::vec4)));
+    glEnableVertexAttribArray(5);
+    glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(3 * sizeof(glm::vec4)));
+
+    glVertexAttribDivisor(2, 1);
+    glVertexAttribDivisor(3, 1);
+    glVertexAttribDivisor(4, 1);
+    glVertexAttribDivisor(5, 1);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glVertexAttribDivisor(2,1);
     glBindVertexArray(0); 
-	
 	
     //do {
 		
@@ -157,7 +166,6 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
         shader1->use();
         shader1->setMat4("projection", projection);
         shader1->setMat4("view", view);
-        shader1->setMat4("model", model);
 
         glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
         glBindVertexArray(frustumArray);

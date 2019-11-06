@@ -1,6 +1,7 @@
 #include "Init.h"
 
 std::vector<float> frustum(float poseX, float poseY, float poseZ);
+bool fromCV2GLM(const cv::Mat& cvmat, glm::mat4* glmmat);
 
 void Init::triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d) {
     cv::Mat A(4,4, CV_32F);
@@ -76,7 +77,7 @@ void Init::extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints,
 
 void Init::processFrames() {
     std::vector<float> p3D;
-    std::vector<glm::vec3> pose;
+    std::vector<glm::mat4> pose;
     Map m; // map object
 
     //instrisic params
@@ -105,9 +106,7 @@ void Init::processFrames() {
     cv::Mat T12, T21;
     std::vector<uchar> mask;
 
-    cv::Mat TQ = cv::Mat::eye(4,4,CV_32F);
-    std::vector<cv::Mat> poseTest;
-    poseTest.push_back(TQ);
+    pose.push_back(glm::mat4(1.0f));
 
     extractKeyPoints(frame, keypoints1, descriptors1);
     while(1) {
@@ -164,8 +163,26 @@ void Init::processFrames() {
         cv::Mat QQ = cv::Mat::eye(4,4,CV_32F);
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
         t.copyTo(QQ.rowRange(0,3).col(3));
+        QQ = QQ.t();
         //std::cout << cv::format(QQ, cv::Formatter::FMT_PYTHON) << std::endl;
-        poseTest.push_back(QQ * poseTest.back());
+		glm::mat4 ttemp;
+		ttemp[0][0] = QQ.at<float>(0,0);
+		ttemp[0][1] = QQ.at<float>(0,1);
+		ttemp[0][2] = QQ.at<float>(0,2);
+		ttemp[0][3] = QQ.at<float>(0,3);
+		ttemp[1][0] = QQ.at<float>(1,0);
+		ttemp[1][1] = QQ.at<float>(1,1);
+		ttemp[1][2] = QQ.at<float>(1,2);
+		ttemp[1][3] = QQ.at<float>(1,3);
+		ttemp[2][0] = QQ.at<float>(2,0);
+		ttemp[2][1] = QQ.at<float>(2,1);
+		ttemp[2][2] = QQ.at<float>(2,2);
+		ttemp[2][3] = QQ.at<float>(2,3);
+		ttemp[3][0] = QQ.at<float>(3,0);
+		ttemp[3][1] = QQ.at<float>(3,1);
+		ttemp[3][2] = QQ.at<float>(3,2);
+		ttemp[3][3] = QQ.at<float>(3,3);
+        pose.push_back(ttemp * pose.back());
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
@@ -178,7 +195,6 @@ void Init::processFrames() {
                 temp.push_back(goodMatches[i]);
                 triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
                 //std::cout << pose3d << std::endl;
-                pose.push_back(glm::vec3(poseTest.back().at<float>(0,3), poseTest.back().at<float>(1,3), poseTest.back().at<float>(2,3)));
 				//std::cout << s3DPoint << std::endl;
                 if (s3DPoint.at<float>(2,0) > 0) {
                     // Redo to use more convenient way to store points
@@ -278,4 +294,23 @@ std::vector<float> frustum(float poseX, float poseY, float poseZ) {
     };
       
     return frustumModel;
+}
+
+
+bool fromCV2GLM(const cv::Mat& cvmat, glm::mat4* glmmat) {
+   	if (cvmat.cols != 4 || cvmat.rows != 4 || cvmat.type() != CV_32FC1) {
+        return false;
+   	}
+    memcpy(glm::value_ptr(*glmmat), cvmat.data, 16 * sizeof(float));
+    *glmmat = glm::transpose(*glmmat);
+    return true;
+}
+
+bool fromGLM2CV(const glm::mat4& glmmat, cv::Mat* cvmat) {
+   	if (cvmat->cols != 4 || cvmat->rows != 4) {
+   		(*cvmat) = cv::Mat(4, 4, CV_32F);
+   	}
+   	memcpy(cvmat->data, glm::value_ptr(glmmat), 16 * sizeof(float));
+   	*cvmat = cvmat->t();
+   	return true;
 }

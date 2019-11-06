@@ -12,6 +12,7 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include "glm/gtc/matrix_transform.hpp"
 
 #include "shader.h"
@@ -21,7 +22,7 @@ class Map {
 
 public:
     Map();
-    void run(std::vector<float>& p3D, std::vector<glm::vec3>& pose);
+    void run(std::vector<float>& p3D, std::vector<glm::mat4>& pose);
 private:
     GLFWwindow* window;
     Shader* ourShader; 
