@@ -21,7 +21,7 @@ class Map {
 
 public:
     Map();
-    void run(std::vector<float>& p3D);
+    void run(std::vector<float>& p3D, std::vector<glm::vec3>& pose);
 private:
     GLFWwindow* window;
     Shader* ourShader; 

@@ -19,6 +19,33 @@ glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow *window);
+std::vector<float> Frustum();
+
+std::vector<float> frustumModel{
+	-0.05f, 0.05f, -0.05f,
+	0.05f, 0.05f, -0.05f,
+	0.0f, 0.0f, 0.0f,
+
+	0.0f, 0.0f, -0.0f,
+	0.05f, 0.0f, -0.05f,
+	0.05f, 0.05f, -0.05f,
+
+	0.0f, 0.0f, -0.0f,
+	-0.05f, 0.0f , -0.05f,
+	-0.05f, 0.05f, -0.05f,
+
+	0.0f, 0.0f, 0.0f,
+	-0.05f, 0.0f, -0.05f,
+	0.05f, 0.0f, -0.05f,
+
+	-0.05f, 0.05f, -0.05f,
+	0.05f, 0.0f, -0.05f,
+	0.05f, 0.0f, -0.05f,
+
+	-0.05f, 0.05f, -0.05f,
+	0.05f, 0.05f, -0.05f,
+	0.05f, 0.0f, -0.05f
+};
 
 Map::Map() {
     // Initialise GLFW
@@ -52,39 +79,36 @@ Map::Map() {
     ourShader = new Shader("camera.vs", "camera.fs");
 };
 
-void Map::run(std::vector<float>& p3D) {
+void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
 
-	// Open a window and create its OpenGL context
-
-
-    // std::vector<float> vertices{
-    //     -0.5f, -0.5f, 0.0f,
-    //      0.5f, -0.5f, 0.0f,
-    //      0.0f, 0.5f, 0.0f,
-    //      0.0f, -0.25f, -3.0f,
-    //      0.0f, 0.0f, 0.0f
-    // };
-
-    // std::vector<float> colors{
-    //     0.0f, 0.0f, 0.0f, 1.0f,
-    //     0.0f, 0.0f, 0.0f, 1.0f,
-    //     0.0f, 0.0f, 0.0f, 1.0f
-    // };
-   // glViewport(0, 0, H, W);
-    // build and compile our shader program
-    // ------------------------------------
-    
     glEnable(GL_PROGRAM_POINT_SIZE);
-    glEnable( GL_POINT_SMOOTH );
+    glEnable(GL_DEPTH_TEST);
+    unsigned int pointsBuffer, pointsArray;
+    glGenVertexArrays(1, &pointsArray);
+    glGenBuffers(1, &pointsBuffer);
+    glBindVertexArray(pointsArray);
 
-    unsigned int vertBuffer, vertArrayId;
-    glGenVertexArrays(1, &vertArrayId);
-    glBindVertexArray(vertArrayId);
-    glGenBuffers(1, &vertBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, vertBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
     glBufferData(GL_ARRAY_BUFFER, p3D.size() * sizeof(float), &p3D.front(), GL_DYNAMIC_DRAW);
+
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
     glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+
+    glBindVertexArray(0); 
+
+    
+    unsigned int frustumBuffer, frustumArray;
+    glGenVertexArrays(1, &frustumArray);
+    glGenBuffers(1, &frustumBuffer);
+    glBindVertexArray(frustumArray);
+
+    glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
+    glBufferData(GL_ARRAY_BUFFER, frustumModel.size() * sizeof(float), &frustumModel.front(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+    glEnableVertexAttribArray(1);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0); 
 
@@ -112,13 +136,39 @@ void Map::run(std::vector<float>& p3D) {
         
         glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
         ourShader->setMat4("model", model);
-
-        glBindVertexArray(vertArrayId);
+        
+        glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
+        glEnableVertexAttribArray(0);
+        glBindVertexArray(pointsArray);
         glDrawArrays(GL_POINTS, 0, p3D.size());
+        glBindVertexArray(0);
+        glDisableVertexAttribArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0); 
+        
+        Shader* shader1 = new Shader("frustum.vs", "frustum.fs");
+        
+        shader1->use();
+        shader1->setMat4("projection", projection);
+        shader1->setMat4("view", view);
 
+        glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
+        glEnableVertexAttribArray(1);
+        glBindVertexArray(frustumArray);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        for (int i = 0; i < pose3d.size(); ++i) {
+            glm::mat4 model1 = glm::mat4(1.0f);
+            model1 = glm::translate(model1, pose3d[i]);
+            shader1->setMat4("model", model1);
+            glDrawArrays(GL_TRIANGLES, 0, 6 * 3);
+        }
+        glBindVertexArray(0);
+        glDisableVertexAttribArray(1);
+        glBindBuffer(GL_ARRAY_BUFFER, 0); 
+        
         // Swap buffers
         glfwSwapBuffers(window);
         glfwPollEvents();
+
     //} //while (glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS && glfwWindowShouldClose(window) == 0 );
 }
 
@@ -178,4 +228,35 @@ void processInput(GLFWwindow *window)
         cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+}
+
+std::vector<float> Frustum() {
+
+    std::vector<float> frustumModel{
+         -0.05f, 0.05f, -0.05f,
+         0.05f, 0.05f, -0.05f,
+         0.0f, 0.0f, 0.0f,
+
+         0.0f, 0.0f, -0.0f,
+         0.05f, 0.0f, -0.05f,
+         0.05f, 0.05f, -0.05f,
+
+         0.0f, 0.0f, -0.0f,
+         -0.05f, 0.0f , -0.05f,
+         -0.05f, 0.05f, -0.05f,
+
+         0.0f, 0.0f, 0.0f,
+         -0.05f, 0.0f, -0.05f,
+         0.05f, 0.0f, -0.05f,
+
+         -0.05f, 0.05f, -0.05f,
+         0.05f, 0.0f, -0.05f,
+         0.05f, 0.0f, -0.05f,
+
+         -0.05f, 0.05f, -0.05f,
+         0.05f, 0.05f, -0.05f,
+         0.05f, 0.0f, -0.05f
+    };
+      
+    return frustumModel;
 }

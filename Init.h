@@ -14,7 +14,8 @@ private:
     void extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
     void drawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints_1, std::vector<cv::KeyPoint>& keypoints_2, std::vector<cv::DMatch>& matches);
     void normalize(const std::vector<cv::Point2f>& keypoints, std::vector<cv::Point2f>& normalizedPoints, cv::Mat& T);
-    void triangulate(const cv::KeyPoint keypoints1, cv::KeyPoint keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d);
+    void triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d);
+    void triangulate(const cv::Point2f& point1, const cv::Point2f& point2, cv::Mat& P1, cv::Mat& P2, cv::Mat& point3d);
     void decomposeE(const cv::Mat& E, cv::Mat& R, cv::Mat& t);
     // video wrapper
     cv::VideoCapture cap;
