@@ -98,6 +98,11 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
 
     glBindVertexArray(0); 
 
+	unsigned int instanceVBO;
+	glGenBuffers(1, &instanceVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(float) * pose3d.size(), &pose3d.front(), GL_STATIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
     
     unsigned int frustumBuffer, frustumArray;
     glGenVertexArrays(1, &frustumArray);
@@ -109,16 +114,20 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
 
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
     glEnableVertexAttribArray(1);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0); 
-
+	
+	glEnableVertexAttribArray(2);
+    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO); 
+	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glVertexAttribDivisor(2,1);
     glBindVertexArray(0); 
-
+	
+	
     //do {
-        float currentFrame = glfwGetTime();
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-
+		
+		float currentFrame = glfwGetTime();
+		deltaTime = currentFrame - lastFrame;
+		lastFrame = currentFrame;
         processInput(window);
 
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -138,11 +147,9 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
         ourShader->setMat4("model", model);
         
         glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
-        glEnableVertexAttribArray(0);
         glBindVertexArray(pointsArray);
         glDrawArrays(GL_POINTS, 0, p3D.size());
         glBindVertexArray(0);
-        glDisableVertexAttribArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         
         Shader* shader1 = new Shader("frustum.vs", "frustum.fs");
@@ -150,24 +157,23 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::vec3>& pose3d) {
         shader1->use();
         shader1->setMat4("projection", projection);
         shader1->setMat4("view", view);
+        shader1->setMat4("model", model);
 
         glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
-        glEnableVertexAttribArray(1);
         glBindVertexArray(frustumArray);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        for (int i = 0; i < pose3d.size(); ++i) {
-            glm::mat4 model1 = glm::mat4(1.0f);
-            model1 = glm::translate(model1, pose3d[i]);
-            shader1->setMat4("model", model1);
-            glDrawArrays(GL_TRIANGLES, 0, 6 * 3);
-        }
+        
+		glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * 3, pose3d.size());
+
         glBindVertexArray(0);
-        glDisableVertexAttribArray(1);
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         
         // Swap buffers
         glfwSwapBuffers(window);
         glfwPollEvents();
+		
+		glDeleteVertexArrays(1, &frustumArray);
+		glDeleteBuffers(1, &frustumBuffer);
 
     //} //while (glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS && glfwWindowShouldClose(window) == 0 );
 }
