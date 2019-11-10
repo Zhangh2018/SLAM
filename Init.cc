@@ -82,7 +82,7 @@ void Init::processFrames() {
 
     //instrisic params
     float f, cx, cy;
-    f = 200.0f;
+    f = 1000.0f;
     cx = 1280.0f * 0.75f / 2.0f;
     cy = 720.0f * 0.75f / 2.0f;
 
@@ -120,6 +120,11 @@ void Init::processFrames() {
         matcher->knnMatch(descriptors1, descriptors2, matches, 2);
         std::cout << "keypoints1: " << keypoints1.size() << " keypoints2: " << keypoints2.size() << " matches: " << matches.size() << std::endl;
 
+        // for some reason working better without normalizarion
+        //cv::Mat T1, T2;
+        //normalize(keypoints1, keypoints1, T1);
+        //normalize(keypoints2, keypoints2, T2);
+
         goodMatches.clear();
         pMatches1.clear(); pMatches2.clear();
         // Lowe's ratio test
@@ -135,13 +140,10 @@ void Init::processFrames() {
         }
         std::cout << "good matches: " << goodMatches.size() << std::endl;
         
-        // for some reason working better without normalizarion
-        //cv::Mat T1, T2;
-        //normalize(pMatches1, pMatches1, T1);
-        //normalize(pMatches2, pMatches2, T2);
         mask.clear();
         cv::Mat F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
         F.convertTo(F, CV_32F);
+        //F = T2.t() * F * T1;
         cv::Mat E = K.t()*F*K;
         cv::Mat R, t;
         //decomposeE(E, R, t);
@@ -149,22 +151,24 @@ void Init::processFrames() {
         cv::recoverPose(E, pMatches1, pMatches2, K, R, t, cv::noArray());
         R.convertTo(R, CV_32F);
         t.convertTo(t, CV_32F);
-		t /= cv::norm(t);
-        //F = T2.t() * F * T1;
+		t /= 10;
+		//R = R.t();
 
         // Camera 1 Projection Matrix K[I|0]
         cv::Mat P1(3,4,CV_32F,cv::Scalar(0));
         K.copyTo(P1.rowRange(0,3).colRange(0,3));
+        cv::Mat O1 = cv::Mat::zeros(3,1,CV_32F);
 
         // Camera 2 Projection Matrix K[R|t]
-        cv::Mat P2(3,4,CV_32F);
+        cv::Mat P2(3,4,CV_32F, cv::Scalar(1));
         R.copyTo(P2.rowRange(0,3).colRange(0,3));
         t.copyTo(P2.rowRange(0,3).col(3));
+        cv::Mat O2 = -R.t()*t;
+
         cv::Mat QQ = cv::Mat::eye(4,4,CV_32F);
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
         t.copyTo(QQ.rowRange(0,3).col(3));
         QQ = QQ.t();
-        //std::cout << cv::format(QQ, cv::Formatter::FMT_PYTHON) << std::endl;
 		glm::mat4 ttemp;
 		ttemp[0][0] = QQ.at<float>(0,0);
 		ttemp[0][1] = QQ.at<float>(0,1);
@@ -182,21 +186,35 @@ void Init::processFrames() {
 		ttemp[3][1] = QQ.at<float>(3,1);
 		ttemp[3][2] = QQ.at<float>(3,2);
 		ttemp[3][3] = QQ.at<float>(3,3);
-        pose.push_back(ttemp * pose.back());
+        pose.push_back(pose.back() * ttemp);
+        float th = pose.back()[3][2];
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
         std::vector<cv::DMatch> temp;
         cv::Mat s3DPoint;
-        cv::Mat pose3d;
         // mask is 1-d vector checking X'FX = 0
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
                 temp.push_back(goodMatches[i]);
                 triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
-                //std::cout << pose3d << std::endl;
-				//std::cout << s3DPoint << std::endl;
-                if (s3DPoint.at<float>(2,0) > 0) {
+                if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
+                // check paralax
+                cv::Mat norm1 = s3DPoint - O1;
+                float dist1 = cv::norm(norm1);
+
+                cv::Mat norm2 = s3DPoint - O2;
+                float dist2 = cv::norm(norm2);
+
+                float cosParallax = norm1.dot(norm2) / (dist1 * dist2);
+
+                if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+
+                cv::Mat s3DPoint2 = R*s3DPoint + t;
+
+                if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+
+                if (-s3DPoint.at<float>(2,0) < th) {
                     // Redo to use more convenient way to store points
                     p3D.push_back(s3DPoint.at<float>(0,0));
                     p3D.push_back(-s3DPoint.at<float>(1,0));
@@ -206,7 +224,7 @@ void Init::processFrames() {
         }
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
-        //drawMatches(frame, keypoints1, keypoints2, goodMatches);
+        drawMatches(frame, keypoints1, keypoints2, goodMatches);
         cv::imshow("Keypoints", frame);
         m.run(p3D, pose);
         keypoints1 = keypoints2;
@@ -230,38 +248,39 @@ cv::DMatch>& matches) {
     }
 }
 
-void Init::normalize(const std::vector<cv::Point2f>& points, std::vector<cv::Point2f>& normalizedPoints, cv::Mat& T) {
+void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint>& normalizedPoints, cv::Mat& T) {
 
     float mX = 0, mY = 0, d = 0;
     const int N = points.size();
     normalizedPoints.resize(N);
 
     for (int i = 0; i < N; ++i) {
-        mX += points[i].x;
-        mY += points[i].y;
+        mX += points[i].pt.x;
+        mY += points[i].pt.y;
     }
 
     mX /= N;
     mY /= N;
 
     for (int i = 0; i < N; ++i) {
-        normalizedPoints[i].x = points[i].x - mX;
-        normalizedPoints[i].y = points[i].y - mY;
-        d += std::sqrt(pow(normalizedPoints[i].x, 2) + pow(normalizedPoints[i].y, 2));
+        normalizedPoints[i].pt.x = points[i].pt.x - mX;
+        normalizedPoints[i].pt.y = points[i].pt.y - mY;
+        //d += std::sqrt(pow(normalizedPoints[i].pt.x, 2) + pow(normalizedPoints[i].pt.y, 2));
     }
 
-    d = std::sqrt(2) * N / d;
-    
+    //d = std::sqrt(2) * N / d;
+    /* 
     for (int i = 0; i < N; ++i) {
-        normalizedPoints[i].x *= d; 
-        normalizedPoints[i].y *= d;
+        normalizedPoints[i].pt.x *= d; 
+        normalizedPoints[i].pt.y *= d;
     }
+    */
 
     T = cv::Mat::eye(3,3, CV_32F);
-    T.at<float>(0,0) = d;
-    T.at<float>(1,1) = d;
-    T.at<float>(0,2) = -mX*d;
-    T.at<float>(1,2) = -mY*d;
+    T.at<float>(0,0) = 1;
+    T.at<float>(1,1) = 1;
+    T.at<float>(0,2) = -mX;
+    T.at<float>(1,2) = -mY;
 }
 
 std::vector<float> frustum(float poseX, float poseY, float poseZ) {
@@ -297,13 +316,26 @@ std::vector<float> frustum(float poseX, float poseY, float poseZ) {
 }
 
 
-bool fromCV2GLM(const cv::Mat& cvmat, glm::mat4* glmmat) {
-   	if (cvmat.cols != 4 || cvmat.rows != 4 || cvmat.type() != CV_32FC1) {
-        return false;
-   	}
-    memcpy(glm::value_ptr(*glmmat), cvmat.data, 16 * sizeof(float));
-    *glmmat = glm::transpose(*glmmat);
-    return true;
+glm::mat4 fromCV2GLM(const cv::Mat& cvmat) {
+   	glm::mat4 temp;
+    temp[0][0] = cvmat.at<float>(0,0);
+    temp[0][1] = cvmat.at<float>(1,0);
+    temp[0][2] = cvmat.at<float>(2,0);
+    temp[0][3] = cvmat.at<float>(3,0);
+    temp[1][0] = cvmat.at<float>(0,1);
+    temp[1][1] = cvmat.at<float>(1,1);
+    temp[1][2] = cvmat.at<float>(2,1);
+    temp[1][3] = cvmat.at<float>(3,1);
+    temp[2][0] = cvmat.at<float>(0,2);
+    temp[2][1] = cvmat.at<float>(1,2);
+    temp[2][2] = cvmat.at<float>(2,2);
+    temp[2][3] = cvmat.at<float>(3,2);
+    temp[3][0] = cvmat.at<float>(0,3);
+    temp[3][1] = cvmat.at<float>(1,3);
+    temp[3][2] = cvmat.at<float>(2,3);
+    temp[3][3] = cvmat.at<float>(3,3);
+
+    return temp;
 }
 
 bool fromGLM2CV(const glm::mat4& glmmat, cv::Mat* cvmat) {
