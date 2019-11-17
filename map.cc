@@ -79,10 +79,24 @@ Map::Map() {
     ourShader = new Shader("camera.vs", "camera.fs");
 };
 
-void Map::run(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
 
-    glEnable(GL_PROGRAM_POINT_SIZE);
-    glEnable(GL_DEPTH_TEST);
+void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
+    for (auto f : frames) {
+        pose3d.push_back(f->pose);
+        for (auto pt : f->kp) {
+            p3D.push_back(pt->xyz[0]);
+            p3D.push_back(pt->xyz[1]);
+            p3D.push_back(pt->xyz[2]);
+        }
+    }
+}
+
+
+void Map::run() {
+    std::vector<float> p3D;
+    std::vector<glm::mat4> pose3d;
+    prepare(p3D, pose3d);
+    glEnable(GL_PROGRAM_POINT_SIZE); glEnable(GL_DEPTH_TEST);
     unsigned int pointsBuffer, pointsArray;
     glGenVertexArrays(1, &pointsArray);
     glGenBuffers(1, &pointsBuffer);
@@ -101,7 +115,7 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
 	unsigned int instanceVBO;
 	glGenBuffers(1, &instanceVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(glm::mat4) * pose3d.size(), &pose3d.front(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(glm::mat4) * pose3d.size(), &pose3d.front(), GL_DYNAMIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
     
     unsigned int frustumBuffer, frustumArray;
@@ -132,58 +146,55 @@ void Map::run(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0); 
 	
-    //do {
-		
-		float currentFrame = glfwGetTime();
-		deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
-        processInput(window);
 
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
-        // activate shader
-        ourShader->use();
+    float currentFrame = glfwGetTime();
+    deltaTime = currentFrame - lastFrame;
+    lastFrame = currentFrame;
+    processInput(window);
 
-        // pass projection matrix to shader (note that in this case it could change every frame)
-        glm::mat4 projection = glm::perspective(glm::radians(fov), H / W, 0.1f, 10.0f);
-        ourShader->setMat4("projection", projection);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+    // activate shader
+    ourShader->use();
 
-        // camera/view transformation
-        glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
-        ourShader->setMat4("view", view);
-        
-        glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
-        ourShader->setMat4("model", model);
-        
-        glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
-        glBindVertexArray(pointsArray);
-        glDrawArrays(GL_POINTS, 0, p3D.size());
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0); 
-        
-        Shader* shader1 = new Shader("frustum.vs", "frustum.fs");
-        
-        shader1->use();
-        shader1->setMat4("projection", projection);
-        shader1->setMat4("view", view);
+    // pass projection matrix to shader (note that in this case it could change every frame)
+    glm::mat4 projection = glm::perspective(glm::radians(fov), H / W, 0.1f, 10.0f);
+    ourShader->setMat4("projection", projection);
 
-        glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
-        glBindVertexArray(frustumArray);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        
-		glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * 3, pose3d.size());
+    // camera/view transformation
+    glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    ourShader->setMat4("view", view);
+    
+    glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+    ourShader->setMat4("model", model);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
+    glBindVertexArray(pointsArray);
+    glDrawArrays(GL_POINTS, 0, p3D.size());
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+    
+    Shader* shader1 = new Shader("frustum.vs", "frustum.fs");
+    
+    shader1->use();
+    shader1->setMat4("projection", projection);
+    shader1->setMat4("view", view);
 
-        glBindVertexArray(0);
-        glBindBuffer(GL_ARRAY_BUFFER, 0); 
-        
-        // Swap buffers
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-		
-		glDeleteVertexArrays(1, &frustumArray);
-		glDeleteBuffers(1, &frustumBuffer);
+    glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
+    glBindVertexArray(frustumArray);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * 3, pose3d.size());
 
-    //} //while (glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS && glfwWindowShouldClose(window) == 0 );
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0); 
+    
+    // Swap buffers
+    glfwSwapBuffers(window);
+    glfwPollEvents();
+    
+    glDeleteVertexArrays(1, &frustumArray);
+    glDeleteBuffers(1, &frustumBuffer);
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
@@ -226,7 +237,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos)
    cameraFront = glm::normalize(front);
 
 }
-
 
 void processInput(GLFWwindow *window)
 {

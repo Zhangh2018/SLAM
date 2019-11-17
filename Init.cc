@@ -1,7 +1,7 @@
 #include "Init.h"
 
 std::vector<float> frustum(float poseX, float poseY, float poseZ);
-bool fromCV2GLM(const cv::Mat& cvmat, glm::mat4* glmmat);
+glm::mat4 fromCV2GLM(const cv::Mat& cvmat);
 
 void Init::triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d) {
     cv::Mat A(4,4, CV_32F);
@@ -106,10 +106,9 @@ void Init::processFrames() {
     cv::Mat T12, T21;
     std::vector<uchar> mask;
 
-    pose.push_back(glm::mat4(1.0f));
-
     extractKeyPoints(frame, keypoints1, descriptors1);
     while(1) {
+        KeyFrame* keyframe = new KeyFrame();
         cap >> frame;
         if (frame.empty()) break;
         cv::resize(frame, frame, cv::Size(), 0.75, 0.75);
@@ -139,7 +138,6 @@ void Init::processFrames() {
 		   	}
         }
         std::cout << "good matches: " << goodMatches.size() << std::endl;
-        
         mask.clear();
         cv::Mat F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
         F.convertTo(F, CV_32F);
@@ -168,26 +166,13 @@ void Init::processFrames() {
         cv::Mat QQ = cv::Mat::eye(4,4,CV_32F);
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
         t.copyTo(QQ.rowRange(0,3).col(3));
-        QQ = QQ.t();
-		glm::mat4 ttemp;
-		ttemp[0][0] = QQ.at<float>(0,0);
-		ttemp[0][1] = QQ.at<float>(0,1);
-		ttemp[0][2] = QQ.at<float>(0,2);
-		ttemp[0][3] = QQ.at<float>(0,3);
-		ttemp[1][0] = QQ.at<float>(1,0);
-		ttemp[1][1] = QQ.at<float>(1,1);
-		ttemp[1][2] = QQ.at<float>(1,2);
-		ttemp[1][3] = QQ.at<float>(1,3);
-		ttemp[2][0] = QQ.at<float>(2,0);
-		ttemp[2][1] = QQ.at<float>(2,1);
-		ttemp[2][2] = QQ.at<float>(2,2);
-		ttemp[2][3] = QQ.at<float>(2,3);
-		ttemp[3][0] = QQ.at<float>(3,0);
-		ttemp[3][1] = QQ.at<float>(3,1);
-		ttemp[3][2] = QQ.at<float>(3,2);
-		ttemp[3][3] = QQ.at<float>(3,3);
-        pose.push_back(pose.back() * ttemp);
-        float th = pose.back()[3][2];
+
+        if (m.frames.empty())
+            keyframe->pose = fromCV2GLM(QQ);
+        else
+		    keyframe->pose = m.frames.back()->pose * fromCV2GLM(QQ);
+
+        float th = keyframe->pose[3][2];
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
@@ -196,7 +181,6 @@ void Init::processFrames() {
         // mask is 1-d vector checking X'FX = 0
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
-                temp.push_back(goodMatches[i]);
                 triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
                 if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
                 // check paralax
@@ -211,22 +195,49 @@ void Init::processFrames() {
                 if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
                 cv::Mat s3DPoint2 = R*s3DPoint + t;
-
                 if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
-                if (-s3DPoint.at<float>(2,0) < th) {
-                    // Redo to use more convenient way to store points
-                    p3D.push_back(s3DPoint.at<float>(0,0));
-                    p3D.push_back(-s3DPoint.at<float>(1,0));
-                    p3D.push_back(-s3DPoint.at<float>(2,0));
+                // Check reprojection error in first image
+                float im1x, im1y;
+                float invZ1 = 1.0/s3DPoint.at<float>(2,0);
+                im1x = f*s3DPoint.at<float>(0,0)*invZ1+cx;
+                im1y = f*s3DPoint.at<float>(1,0)*invZ1+cy;
+                float kp1x = keypoints1[goodMatches[i].queryIdx].pt.x;
+                float kp1y = keypoints1[goodMatches[i].queryIdx].pt.y;
+                float kp2x = keypoints2[goodMatches[i].trainIdx].pt.x;
+                float kp2y = keypoints2[goodMatches[i].trainIdx].pt.y;
+
+
+                float squareError1 = (im1x-kp1x)*(im1x-kp1x)+(im1y-kp1y)*(im1y-kp1y);
+
+                if(squareError1 > 4)
+                    continue;
+
+                // Check reprojection error in second image
+                float im2x, im2y;
+                float invZ2 = 1.0/s3DPoint2.at<float>(2,0);
+                im2x = f*s3DPoint2.at<float>(0,0)*invZ2+cx;
+                im2y = f*s3DPoint2.at<float>(1,0)*invZ2+cy;
+
+                float squareError2 = (im2x-kp2x)*(im2x-kp2x)+(im2y-kp2y)*(im2y-kp2y);
+
+                if(squareError2 > 4)
+                    continue;
+
+                temp.push_back(goodMatches[i]);
+
+                if (-s3DPoint.at<float>(2,0) < th && (s3DPoint.at<float>(2,0) - (-th)) < 10) {
+                    Point* pt = new Point(&K, s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0), keyframe);
+                    keyframe->kp.push_back(pt);
                 }
             }
         }
+        m.frames.push_back(keyframe);
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
         cv::imshow("Keypoints", frame);
-        m.run(p3D, pose);
+        m.run();
         keypoints1 = keypoints2;
         descriptors1 = descriptors2;
 
@@ -268,13 +279,12 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
         //d += std::sqrt(pow(normalizedPoints[i].pt.x, 2) + pow(normalizedPoints[i].pt.y, 2));
     }
 
-    //d = std::sqrt(2) * N / d;
-    /* 
+    d = std::sqrt(2) * N / d;
+     
     for (int i = 0; i < N; ++i) {
         normalizedPoints[i].pt.x *= d; 
         normalizedPoints[i].pt.y *= d;
     }
-    */
 
     T = cv::Mat::eye(3,3, CV_32F);
     T.at<float>(0,0) = 1;
@@ -282,39 +292,6 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
     T.at<float>(0,2) = -mX;
     T.at<float>(1,2) = -mY;
 }
-
-std::vector<float> frustum(float poseX, float poseY, float poseZ) {
-
-    std::vector<float> frustumModel{
-
-         -0.05f + poseX, 0.05f + poseY, 0.05f + poseZ,
-         0.05f + poseX, 0.05f + poseY, 0.05f + poseZ,
-         0.0f + poseX, 0.0f + poseY, 0.0f + poseZ,
-
-         0.0f  + poseX, 0.0f   + poseY, 0.0f + poseZ,
-         0.05f + poseX, 0.0f   + poseY, 0.05f + poseZ,
-         0.05f + poseX, 0.05f  + poseY, 0.05f + poseZ,
-
-         0.0f   + poseX, 0.0f  + poseY, 0.0f + poseZ,
-         -0.05f + poseX, 0.0f  + poseY, 0.05f + poseZ,
-         -0.05f + poseX, 0.05f + poseY, 0.05f + poseZ,
-
-         0.0f   + poseX, 0.0f + poseY, 0.0f + poseZ,
-         -0.05f + poseX, 0.0f + poseY, 0.05f + poseZ,
-         0.05f  + poseX, 0.0f + poseY, 0.05f + poseZ,
-
-         -0.05f + poseX, 0.05f + poseY, 0.05f + poseZ,
-         0.05f  + poseX, 0.0f + poseY, 0.05f + poseZ,
-         0.05f  + poseX, 0.0f + poseY, 0.05f + poseZ,
-
-         -0.05f + poseX, 0.05f + poseY, 0.05f + poseZ,
-         0.05f  + poseX, 0.05f + poseY, 0.05f + poseZ,
-         0.05f  + poseX, 0.0f + poseY, 0.05f + poseZ
-    };
-      
-    return frustumModel;
-}
-
 
 glm::mat4 fromCV2GLM(const cv::Mat& cvmat) {
    	glm::mat4 temp;

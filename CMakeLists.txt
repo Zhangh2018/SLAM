@@ -21,7 +21,7 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/frustum.fs
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/frustum.vs
      DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable(SLAM main.cc Init.cc map.cc)
+add_executable(SLAM main.cc Init.cc keyframe.cc map.cc)
 
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)

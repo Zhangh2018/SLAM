@@ -16,16 +16,19 @@
 #include "glm/gtc/matrix_transform.hpp"
 
 #include "shader.h"
+#include "keyframe.h"
 
 
 class Map {
 
 public:
     Map();
-    void run(std::vector<float>& p3D, std::vector<glm::mat4>& pose);
+    void run();
+    std::vector<KeyFrame*> frames;
+    void prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d);
 private:
     GLFWwindow* window;
     Shader* ourShader; 
 };
 
-#endif // INIT_H
+#endif 
