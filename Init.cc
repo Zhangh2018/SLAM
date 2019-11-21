@@ -107,7 +107,10 @@ void Init::processFrames() {
     std::vector<uchar> mask;
 
     extractKeyPoints(frame, keypoints1, descriptors1);
+    std::cout << keypoints1.size() << " " << descriptors1.rows << std::endl;
+    bool TRACKING = false;
     while(1) {
+        if (m.frames.size() > 4) TRACKING = true;
         KeyFrame* keyframe = new KeyFrame();
         cap >> frame;
         if (frame.empty()) break;
@@ -178,9 +181,29 @@ void Init::processFrames() {
 
         std::vector<cv::DMatch> temp;
         cv::Mat s3DPoint;
+        /*
+        if (TRACKING) {
+            std::vector<cv::KeyPoint> mapKeyPoints;
+            for (auto& pt : m.points) {
+                float im1x, im1y;
+                float invZ1 = 1.0/pt[2];
+                im1x = f*pt[0]*invZ1+cx;
+                im1y = f*pt[1]*invZ1+cy;   
+                mapKeyPoints.push_back(cv::KeyPoint(im1x, 1m1y));
+            }
+            std::vector<std::vector<cv::DMatch>> rMatches = matcher->knnMatch(mapKeyPoints, keypoints2);
+
+        } */
         // mask is 1-d vector checking X'FX = 0
+        int cnt = 0;
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
+                if (!m.frames.empty()) {
+                    if (std::find(m.frames.back()->desc.begin(), m.frames.back()->desc.end(), goodMatches[i].queryIdx) != m.frames.back()->desc.end()) {
+                        cnt++;
+                        continue;
+                    }
+                }
                 triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
                 if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
                 // check paralax
@@ -227,11 +250,15 @@ void Init::processFrames() {
                 temp.push_back(goodMatches[i]);
 
                 if (-s3DPoint.at<float>(2,0) < th && (s3DPoint.at<float>(2,0) - (-th)) < 10) {
-                    Point* pt = new Point(&K, s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0), keyframe);
+                    Point* pt = new Point(&K, s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0), goodMatches[i], keyframe);
                     keyframe->kp.push_back(pt);
+                    keyframe->desc.push_back(goodMatches[i].trainIdx);
+                    m.points.push_back(pt);
                 }
             }
         }
+        std::cout << "Number of points: " << m.points.size() << std::endl;
+        std::cout << "Number of already added points " << cnt << std::endl;
         m.frames.push_back(keyframe);
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;

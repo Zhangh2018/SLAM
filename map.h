@@ -25,6 +25,7 @@ public:
     Map();
     void run();
     std::vector<KeyFrame*> frames;
+    std::vector<Point*> points;
     void prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d);
 private:
     GLFWwindow* window;

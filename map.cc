@@ -83,11 +83,11 @@ Map::Map() {
 void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
     for (auto f : frames) {
         pose3d.push_back(f->pose);
-        for (auto pt : f->kp) {
+    }
+    for (auto pt : points) {
             p3D.push_back(pt->xyz[0]);
             p3D.push_back(pt->xyz[1]);
             p3D.push_back(pt->xyz[2]);
-        }
     }
 }
 
