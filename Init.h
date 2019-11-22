@@ -4,6 +4,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include "map.h"
+#include "optimizer.h"
 
 
 class Init {

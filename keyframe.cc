@@ -1,14 +1,14 @@
 #include "keyframe.h"
 
-Point::Point(cv::Mat* _K, float x, float y, float z, cv::DMatch _desc, KeyFrame* frame) {
-    frames.push_back(frame);
-    K = _K;
+Point::Point(int _id, float x, float y, float z) {
     xyz.push_back(x);
     xyz.push_back(y);
     xyz.push_back(z);
-    desc = _desc;
+    id = _id;
 }
 
-KeyFrame::KeyFrame() {
+KeyFrame::KeyFrame(cv::Mat* _K, int _id) {
+    K = _K;
+    id = _id;
 }
 

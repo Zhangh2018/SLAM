@@ -4,28 +4,32 @@
 #include <glm/glm.hpp>
 #include <iostream> 
 #include <vector>
+#include <map>
 
 class KeyFrame;
 
 class Point {
 public:
-    Point(cv::Mat* K, float x, float y, float z, cv::DMatch desc, KeyFrame* frame);
-    cv::Mat* K;
+    Point(int id, float x, float y, float z);
+    int id;
     std::vector<float> xyz;
-    std::vector<KeyFrame*> frames;
-    cv::DMatch desc;
+    std::map<KeyFrame*, int> obs;
 };
 
 // make getters and setters
 class KeyFrame {
 
 public:
-    KeyFrame();
+    KeyFrame(cv::Mat* K, int id);
     
-    glm::mat4 pose;
-    std::vector<Point*> kp;
+    cv::Mat* K;
+    int id;
+    cv::Mat pose;
+    std::vector<cv::KeyPoint> kp;
     std::vector<int> desc;
 
+
+    bool bad = false;
 };
 
 

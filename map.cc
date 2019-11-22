@@ -19,6 +19,7 @@ glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f, 0.0f);
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void processInput(GLFWwindow *window);
+glm::mat4 fromCV2GLM(const cv::Mat& cmat);
 std::vector<float> Frustum();
 
 std::vector<float> frustumModel{
@@ -82,7 +83,7 @@ Map::Map() {
 
 void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
     for (auto f : frames) {
-        pose3d.push_back(f->pose);
+        pose3d.push_back(fromCV2GLM(f->pose));
     }
     for (auto pt : points) {
             p3D.push_back(pt->xyz[0]);
@@ -283,4 +284,27 @@ std::vector<float> Frustum() {
     };
       
     return frustumModel;
+}
+
+
+glm::mat4 fromCV2GLM(const cv::Mat& cvmat) {
+   	glm::mat4 temp;
+    temp[0][0] = cvmat.at<float>(0,0);
+    temp[0][1] = cvmat.at<float>(1,0);
+    temp[0][2] = cvmat.at<float>(2,0);
+    temp[0][3] = cvmat.at<float>(3,0);
+    temp[1][0] = cvmat.at<float>(0,1);
+    temp[1][1] = cvmat.at<float>(1,1);
+    temp[1][2] = cvmat.at<float>(2,1);
+    temp[1][3] = cvmat.at<float>(3,1);
+    temp[2][0] = cvmat.at<float>(0,2);
+    temp[2][1] = cvmat.at<float>(1,2);
+    temp[2][2] = cvmat.at<float>(2,2);
+    temp[2][3] = cvmat.at<float>(3,2);
+    temp[3][0] = cvmat.at<float>(0,3);
+    temp[3][1] = cvmat.at<float>(1,3);
+    temp[3][2] = cvmat.at<float>(2,3);
+    temp[3][3] = cvmat.at<float>(3,3);
+
+    return temp;
 }

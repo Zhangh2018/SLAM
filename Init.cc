@@ -1,8 +1,5 @@
 #include "Init.h"
 
-std::vector<float> frustum(float poseX, float poseY, float poseZ);
-glm::mat4 fromCV2GLM(const cv::Mat& cvmat);
-
 void Init::triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d) {
     cv::Mat A(4,4, CV_32F);
 
@@ -108,10 +105,12 @@ void Init::processFrames() {
 
     extractKeyPoints(frame, keypoints1, descriptors1);
     std::cout << keypoints1.size() << " " << descriptors1.rows << std::endl;
+
+    Optimizer optimizer;
     bool TRACKING = false;
     while(1) {
         if (m.frames.size() > 4) TRACKING = true;
-        KeyFrame* keyframe = new KeyFrame();
+        KeyFrame* keyframe = new KeyFrame(&K, m.frames.size());
         cap >> frame;
         if (frame.empty()) break;
         cv::resize(frame, frame, cv::Size(), 0.75, 0.75);
@@ -171,11 +170,11 @@ void Init::processFrames() {
         t.copyTo(QQ.rowRange(0,3).col(3));
 
         if (m.frames.empty())
-            keyframe->pose = fromCV2GLM(QQ);
+            keyframe->pose = QQ; 
         else
-		    keyframe->pose = m.frames.back()->pose * fromCV2GLM(QQ);
+		    keyframe->pose = m.frames.back()->pose * QQ;
 
-        float th = keyframe->pose[3][2];
+        float th = keyframe->pose.at<float>(3,2);
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
@@ -250,18 +249,27 @@ void Init::processFrames() {
                 temp.push_back(goodMatches[i]);
 
                 if (-s3DPoint.at<float>(2,0) < th && (s3DPoint.at<float>(2,0) - (-th)) < 10) {
-                    Point* pt = new Point(&K, s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0), goodMatches[i], keyframe);
-                    keyframe->kp.push_back(pt);
-                    keyframe->desc.push_back(goodMatches[i].trainIdx);
+                    int idx = goodMatches[i].trainIdx;
+                    Point* pt = new Point(m.points.size(), s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0));
+                    pt->obs[keyframe] = keyframe->kp.size();
+                    keyframe->kp.push_back(keypoints2[idx]);
+                    keyframe->desc.push_back(idx);
                     m.points.push_back(pt);
                 }
             }
         }
         std::cout << "Number of points: " << m.points.size() << std::endl;
         std::cout << "Number of already added points " << cnt << std::endl;
+
+        if (keyframe->kp.size() < 50) keyframe->bad = true;
         m.frames.push_back(keyframe);
+
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
+
+        if (m.frames.size() % 20 == 0)
+            optimizer.BundleAdjustment(m, 5);
+
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
         cv::imshow("Keypoints", frame);
         m.run();
@@ -318,35 +326,4 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
     T.at<float>(1,1) = 1;
     T.at<float>(0,2) = -mX;
     T.at<float>(1,2) = -mY;
-}
-
-glm::mat4 fromCV2GLM(const cv::Mat& cvmat) {
-   	glm::mat4 temp;
-    temp[0][0] = cvmat.at<float>(0,0);
-    temp[0][1] = cvmat.at<float>(1,0);
-    temp[0][2] = cvmat.at<float>(2,0);
-    temp[0][3] = cvmat.at<float>(3,0);
-    temp[1][0] = cvmat.at<float>(0,1);
-    temp[1][1] = cvmat.at<float>(1,1);
-    temp[1][2] = cvmat.at<float>(2,1);
-    temp[1][3] = cvmat.at<float>(3,1);
-    temp[2][0] = cvmat.at<float>(0,2);
-    temp[2][1] = cvmat.at<float>(1,2);
-    temp[2][2] = cvmat.at<float>(2,2);
-    temp[2][3] = cvmat.at<float>(3,2);
-    temp[3][0] = cvmat.at<float>(0,3);
-    temp[3][1] = cvmat.at<float>(1,3);
-    temp[3][2] = cvmat.at<float>(2,3);
-    temp[3][3] = cvmat.at<float>(3,3);
-
-    return temp;
-}
-
-bool fromGLM2CV(const glm::mat4& glmmat, cv::Mat* cvmat) {
-   	if (cvmat->cols != 4 || cvmat->rows != 4) {
-   		(*cvmat) = cv::Mat(4, 4, CV_32F);
-   	}
-   	memcpy(cvmat->data, glm::value_ptr(glmmat), 16 * sizeof(float));
-   	*cvmat = cvmat->t();
-   	return true;
 }
