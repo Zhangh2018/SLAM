@@ -1,6 +1,7 @@
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
 #include <opencv2/core/core.hpp>
+#include <opencv2/flann.hpp>
 #include <glm/glm.hpp>
 #include <iostream> 
 #include <vector>
@@ -27,7 +28,6 @@ public:
     cv::Mat pose;
     std::vector<cv::KeyPoint> kp;
     std::vector<int> desc;
-
 
     bool bad = false;
 };

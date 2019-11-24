@@ -1,5 +1,7 @@
 #include "Init.h"
 
+void threadBA(Optimizer& opt, Map& m, int iter);
+
 void Init::triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d) {
     cv::Mat A(4,4, CV_32F);
 
@@ -79,7 +81,7 @@ void Init::processFrames() {
 
     //instrisic params
     float f, cx, cy;
-    f = 1000.0f;
+    f = 700.0f;
     cx = 1280.0f * 0.75f / 2.0f;
     cy = 720.0f * 0.75f / 2.0f;
 
@@ -180,34 +182,56 @@ void Init::processFrames() {
 
         std::vector<cv::DMatch> temp;
         cv::Mat s3DPoint;
-        /*
-        if (TRACKING) {
-            std::vector<cv::KeyPoint> mapKeyPoints;
-            for (auto& pt : m.points) {
-                float im1x, im1y;
-                float invZ1 = 1.0/pt[2];
-                im1x = f*pt[0]*invZ1+cx;
-                im1y = f*pt[1]*invZ1+cy;   
-                mapKeyPoints.push_back(cv::KeyPoint(im1x, 1m1y));
-            }
-            std::vector<std::vector<cv::DMatch>> rMatches = matcher->knnMatch(mapKeyPoints, keypoints2);
+        cv::Mat ptsMat;
 
-        } */
+        // projecting map points with current pose to xy space and make them compatible for KDtree
+        if (m.points.size() > 0) {
+            for (auto& pt : m.points) {
+                cv::Mat hPt = (cv::Mat_<float>(1,4) << pt->xyz[0], pt->xyz[1], pt->xyz[2], 1);
+                hPt = keyframe->pose * hPt.t();
+                hPt.t();
+                hPt /= hPt.at<float>(3);
+                cv::Mat projPt = (cv::Mat_<float>(1,2) << (hPt.at<float>(0) / hPt.at<float>(2)), (hPt.at<float>(1) / hPt.at<float>(2))); 
+                ptsMat.push_back(projPt);
+            }
+        }
         // mask is 1-d vector checking X'FX = 0
         int cnt = 0;
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
+                /*
                 if (!m.frames.empty()) {
                     if (std::find(m.frames.back()->desc.begin(), m.frames.back()->desc.end(), goodMatches[i].queryIdx) != m.frames.back()->desc.end()) {
                         cnt++;
                         continue;
                     }
                 }
+                */
+                // adding points to KDTree and searching in matches already added map points
+                if (!ptsMat.empty()) {
+                    cv::flann::Index flann_index(ptsMat, cv::flann::KDTreeIndexParams(1));
+                    cv::Mat query = (cv::Mat_<float>(1,2) << keypoints2[goodMatches[i].trainIdx].pt.x, keypoints2[goodMatches[i].trainIdx].pt.y);
+                    cv::Mat indices, dists;
+                    flann_index.radiusSearch(query, indices, dists, 1, 5.0f, cv::flann::SearchParams());
+
+                    int index = indices.at<int>(0);
+                    if(!dists.empty() && index > 0 && index < m.points.size()) {
+                        Point* pt = m.points[index];
+                        int idx = goodMatches[i].trainIdx;
+                        pt->obs[keyframe] = keyframe->kp.size();
+                        keyframe->kp.push_back(keypoints2[idx]);
+                        keyframe->desc.push_back(idx);
+                        cnt++;
+                        continue;
+                    }
+                }
                 triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
+                // checking if coordinates goes to infinity
                 if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
-                // check paralax
+                // checking paralax
                 cv::Mat norm1 = s3DPoint - O1;
                 float dist1 = cv::norm(norm1);
+
 
                 cv::Mat norm2 = s3DPoint - O2;
                 float dist2 = cv::norm(norm2);
@@ -267,8 +291,11 @@ void Init::processFrames() {
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
 
-        if (m.frames.size() % 20 == 0)
-            optimizer.BundleAdjustment(m, 5);
+        if (m.frames.size() % 10 == 0) {
+            //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
+            //t1.join();
+            optimizer.BundleAdjustment(m, 10);
+        }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
         cv::imshow("Keypoints", frame);
@@ -326,4 +353,9 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
     T.at<float>(1,1) = 1;
     T.at<float>(0,2) = -mX;
     T.at<float>(1,2) = -mY;
+}
+
+
+void threadBA(Optimizer& opt, Map& m, int iter) {
+    opt.BundleAdjustment(m, iter);
 }

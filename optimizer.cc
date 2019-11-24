@@ -19,7 +19,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
 
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
     optimizer.setAlgorithm(solver);
-
+    
+    // adding keyframes as vertices
     for (int i = 0; i < m.frames.size(); i++) {
         KeyFrame* kf = m.frames[i];
         if (kf->bad) continue;
@@ -32,7 +33,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
 
     const int maxId = m.frames.size();
     const float thHuber = sqrt(5.991);
-
+    
+    // adding points as vertices
     for (int i = 0; i < m.points.size(); i++) {
         Point* pt  = m.points[i];
         g2o::VertexSBAPointXYZ* Point = new g2o::VertexSBAPointXYZ();
@@ -41,7 +43,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         Point->setId(id);
         Point->setMarginalized(true);
         optimizer.addVertex(Point);
-
+        
+        // adding observations as edges
         for (auto& it: pt->obs) {
             KeyFrame* kf = it.first;
             if (kf->bad) continue;
@@ -72,6 +75,10 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
     optimizer.initializeOptimization();
     optimizer.optimize(iter);
 
+    
+    // Update with optimized data
+
+    // Keyframes
     for (int i = 0; i < m.frames.size(); i++) {
         KeyFrame* kf = m.frames[i];
         if (kf->bad) continue;
@@ -80,6 +87,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         kf->pose = toCvMat(SE3quat);
     }
 
+    // Points
     for (int i = 0; i < m.points.size(); i++) {
         Point* pt = m.points[i];
         g2o::VertexSBAPointXYZ* Point = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pt->id + maxId + 1));
