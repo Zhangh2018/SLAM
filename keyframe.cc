@@ -17,12 +17,17 @@ void Point::setCoords(float x, float y, float z) {
     xyz[2] = z;
 }
 
-std::vector<float> Point::getCorods() {
+void Point::setCoords(std::vector<float> _xyz) {
+    std::unique_lock<std::mutex> lock(mutexPoint);
+    xyz = _xyz;
+}
+
+std::vector<float> Point::getCoords() {
     std::unique_lock<std::mutex> lock(mutexPoint);
     return xyz;
 }
 
-void Point::addObservation(Keyframe* kf, int idx) {
+void Point::addObservation(KeyFrame* kf, int idx) {
     std::unique_lock<std::mutex> lock(mutexObservation);
     obs[kf] = idx;
 }
@@ -40,7 +45,7 @@ KeyFrame::KeyFrame(cv::Mat* _K, int _id) {
     id = _id;
 }
 
-void KeyFrame::setPose(cv::Mat pose) {
+void KeyFrame::setPose(cv::Mat _pose) {
     std::unique_lock<std::mutex> lock(mutexPose);
     pose = _pose;
 }
@@ -61,3 +66,7 @@ cv::KeyPoint KeyFrame::getKeypoint(int idx) {
      return kp[idx];
 }
 
+int KeyFrame::getKpSize() {
+    std::unique_lock<std::mutex> lock(mutexKeypoint);
+    return kp.size();
+}

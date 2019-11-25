@@ -3,7 +3,7 @@
 #include <thread> 
 
 int main() {
-    cv::VideoCapture cap("./../test_video.mp4");
+    cv::VideoCapture cap("./../test_video1.mp4");
     
     Init init(cap, 5000, 25);
     init.processFrames();

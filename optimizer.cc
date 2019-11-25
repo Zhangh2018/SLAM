@@ -19,10 +19,13 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
 
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
     optimizer.setAlgorithm(solver);
+
+    std::vector<Point*> points = m.getPoints();
+    std::vector<KeyFrame*> frames = m.getFrames();
     
     // adding keyframes as vertices
-    for (int i = 0; i < m.frames.size(); i++) {
-        KeyFrame* kf = m.frames[i];
+    for (int i = 0; i < frames.size(); i++) {
+        KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
         SE3->setEstimate(toSE3Quat(kf->getPose()));
@@ -31,14 +34,15 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         optimizer.addVertex(SE3);
     }
 
-    const int maxId = m.frames.size();
+    const int maxId = frames.size();
     const float thHuber = sqrt(5.991);
     
     // adding points as vertices
-    for (int i = 0; i < m.points.size(); i++) {
-        Point* pt  = m.points[i];
+    for (int i = 0; i < points.size(); i++) {
+        Point* pt  = points[i];
         g2o::VertexSBAPointXYZ* Point = new g2o::VertexSBAPointXYZ();
-        Point->setEstimate(toVector3d(pt->getCoords()));
+        std::vector<float> coords = pt->getCoords();
+        Point->setEstimate(toVector3d(coords));
         int id = pt->id + maxId + 1;
         Point->setId(id);
         Point->setMarginalized(true);
@@ -49,7 +53,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
             KeyFrame* kf = it.first;
             if (kf->bad) continue;
             Eigen::Matrix<double,2,1> obs;
-            cv::KeyPoint kp = kf->getKeypoint[it.second];
+            cv::KeyPoint kp = kf->getKeypoint(it.second);
             obs << kp.pt.x, kp.pt.y;
 
             g2o::EdgeSE3ProjectXYZ* e = new g2o::EdgeSE3ProjectXYZ();
@@ -79,8 +83,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
     // Update with optimized data
 
     // Keyframes
-    for (int i = 0; i < m.frames.size(); i++) {
-        KeyFrame* kf = m.frames[i];
+    for (int i = 0; i < frames.size(); i++) {
+        KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(kf->id));
         g2o::SE3Quat SE3quat = SE3->estimate();
@@ -88,8 +92,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
     }
 
     // Points
-    for (int i = 0; i < m.points.size(); i++) {
-        Point* pt = m.points[i];
+    for (int i = 0; i < points.size(); i++) {
+        Point* pt = points[i];
         g2o::VertexSBAPointXYZ* Point = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pt->id + maxId + 1));
         pt->setCoords(toStdVector(Point->estimate()));
     }

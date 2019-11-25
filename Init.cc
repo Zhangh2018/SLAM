@@ -111,8 +111,10 @@ void Init::processFrames() {
     Optimizer optimizer;
     bool TRACKING = false;
     while(1) {
-        if (m.frames.size() > 4) TRACKING = true;
-        KeyFrame* keyframe = new KeyFrame(&K, m.frames.size());
+        std::vector<KeyFrame*> frames = m.getFrames();
+        std::vector<Point*> points = m.getPoints(); 
+        if (frames.size() > 4) TRACKING = true;
+        KeyFrame* keyframe = new KeyFrame(&K, frames.size());
         cap >> frame;
         if (frame.empty()) break;
         cv::resize(frame, frame, cv::Size(), 0.75, 0.75);
@@ -171,12 +173,12 @@ void Init::processFrames() {
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
         t.copyTo(QQ.rowRange(0,3).col(3));
 
-        if (m.frames.empty())
-            keyframe->pose = QQ; 
+        if (frames.empty())
+            keyframe->setPose(QQ); 
         else
-		    keyframe->pose = m.frames.back()->pose * QQ;
+		    keyframe->setPose(frames.back()->getPose() * QQ);
 
-        float th = keyframe->pose.at<float>(3,2);
+        float th = keyframe->getPose().at<float>(3,2);
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
@@ -185,8 +187,8 @@ void Init::processFrames() {
         cv::Mat ptsMat;
 
         // projecting map points with current pose to xy space and make them compatible for KDtree
-        if (m.points.size() > 0) {
-            for (auto& pt : m.points) {
+        if (points.size() > 0) {
+            for (auto& pt : points) {
                 std::vector<float> xyz = pt->getCoords();
                 cv::Mat hPt = (cv::Mat_<float>(1,4) << xyz[0], xyz[1], xyz[2], 1);
                 hPt = keyframe->getPose() * hPt.t();
@@ -217,8 +219,8 @@ void Init::processFrames() {
                     flann_index.radiusSearch(query, indices, dists, 1, 5.0f, cv::flann::SearchParams());
 
                     int index = indices.at<int>(0);
-                    if(!dists.empty() && index > 0 && index < m.points.size()) {
-                        Point* pt = m.points[index];
+                    if(!dists.empty() && index > 0 && index < points.size()) {
+                        Point* pt = points[index];
                         pt->addObservation(keyframe, keyframe->getKpSize());
                         keyframe->addKeypoint(keypoints2[idx], idx);
                         cnt++;
@@ -273,23 +275,24 @@ void Init::processFrames() {
                 temp.push_back(goodMatches[i]);
 
                 if (-s3DPoint.at<float>(2,0) < th && (s3DPoint.at<float>(2,0) - (-th)) < 10) {
-                    Point* pt = new Point(m.points.size(), s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0));
+                    Point* pt = new Point(points.size(), s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0));
                     pt->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(keypoints2[idx], idx);
-                    m.points.push_back(pt);
+                    points.push_back(pt);
+                    m.addPoint(pt);
                 }
             }
         }
-        std::cout << "Number of points: " << m.points.size() << std::endl;
+        std::cout << "Number of points: " << points.size() << std::endl;
         std::cout << "Number of already added points " << cnt << std::endl;
 
-        if (keyframe->kp.size() < 50) keyframe->bad = true;
-        m.frames.push_back(keyframe);
+        if (keyframe->getKpSize() < 50) keyframe->bad = true;
+        m.addFrame(keyframe);
 
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
 
-        if (m.frames.size() % 10 == 0) {
+        if (frames.size() % 10 == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
             optimizer.BundleAdjustment(m, 10);

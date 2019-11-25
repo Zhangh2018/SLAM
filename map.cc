@@ -87,9 +87,9 @@ void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
     }
     for (auto pt : getPoints()) {
         std::vector<float> xyz = pt->getCoords();
-        p3D.push_back(pt->xyz[0]);
-        p3D.push_back(pt->xyz[1]);
-        p3D.push_back(pt->xyz[2]);
+        p3D.push_back(xyz[0]);
+        p3D.push_back(xyz[1]);
+        p3D.push_back(xyz[2]);
     }
 }
 

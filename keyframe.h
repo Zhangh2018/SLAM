@@ -17,9 +17,10 @@ public:
 
 public:
     void setCoords(float x, float y, float z);
+    void setCoords(std::vector<float> xyz);
     std::vector<float> getCoords();
-    void addObservation(Keyframe* kf, int idx);
-    std::map<KeyFrame*, idx> getObservations();
+    void addObservation(KeyFrame* kf, int idx);
+    std::map<KeyFrame*, int> getObservations();
 
 private:
     std::vector<float> xyz;
