@@ -74,11 +74,13 @@ void Init::extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints,
     desc->compute(frame, keypoints, descriptors);
 }
 
-void Init::processFrames() {
-    std::vector<float> p3D;
-    std::vector<glm::mat4> pose;
-    Map m; // map object
+void Init::process() {
+    Map m;
+    std::thread t1(&Init::processFrames, this, std::ref(m));
+    m.run();
+}
 
+void Init::processFrames(Map& m) {
     //instrisic params
     float f, cx, cy;
     f = 700.0f;
@@ -203,14 +205,7 @@ void Init::processFrames() {
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
                 int idx = goodMatches[i].trainIdx;
-                /*
-                if (!m.frames.empty()) {
-                    if (std::find(m.frames.back()->desc.begin(), m.frames.back()->desc.end(), goodMatches[i].queryIdx) != m.frames.back()->desc.end()) {
-                        cnt++;
-                        continue;
-                    }
-                }
-                */
+
                 // adding points to KDTree and searching in matches already added map points
                 if (!ptsMat.empty()) {
                     cv::flann::Index flann_index(ptsMat, cv::flann::KDTreeIndexParams(1));
@@ -292,20 +287,19 @@ void Init::processFrames() {
         goodMatches = temp;
         std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
 
-        if (frames.size() % 10 == 0 && frames.size() > 0) {
+        if (frames.size() % 20 == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
             optimizer.BundleAdjustment(m, 10);
         }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
-        cv::imshow("Keypoints", frame);
-        m.run();
+        m.setCVFrame(frame);
         keypoints1 = keypoints2;
         descriptors1 = descriptors2;
 
-        char c = (char)cv::waitKey(25);
-        if (c == 27) break;
+        //char c = (char)cv::waitKey(25);
+        //if (c == 27) break;
     }
 }
 

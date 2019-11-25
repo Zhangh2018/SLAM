@@ -113,7 +113,23 @@ std::vector<KeyFrame*> Map::getFrames() {
     return frames;
 }
 
+void Map::setCVFrame(cv::Mat frame) {
+    std::unique_lock<std::mutex> lock(mutexCVFrame);
+    cvFrame = frame;
+}
+
+cv::Mat Map::getCVFrame() {
+    std::unique_lock<std::mutex> lock(mutexCVFrame);
+    return cvFrame;
+}
+
 void Map::run() {
+    while(1) {
+    cv::Mat cvFrame = getCVFrame();
+
+    if (!cvFrame.empty())
+        cv::imshow("Keypoints", cvFrame);
+
     std::vector<float> p3D;
     std::vector<glm::mat4> pose3d;
     prepare(p3D, pose3d);
@@ -216,6 +232,7 @@ void Map::run() {
     
     glDeleteVertexArrays(1, &frustumArray);
     glDeleteBuffers(1, &frustumBuffer);
+    }
 }
 
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)

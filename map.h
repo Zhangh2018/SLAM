@@ -9,6 +9,7 @@
 #include <mutex>
 
 #include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -32,12 +33,17 @@ public:
     void addFrame(KeyFrame* frame);
     std::vector<KeyFrame*> getFrames();
 
+    void setCVFrame(cv::Mat frame);
+    cv::Mat getCVFrame();
+
 private:
     std::vector<KeyFrame*> frames;
     std::vector<Point*> points;
+    cv::Mat cvFrame;
 
     std::mutex mutexFrames;
     std::mutex mutexPoints;
+    std::mutex mutexCVFrame;
 
     GLFWwindow* window;
     Shader* ourShader; 
