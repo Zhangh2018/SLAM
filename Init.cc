@@ -187,8 +187,9 @@ void Init::processFrames() {
         // projecting map points with current pose to xy space and make them compatible for KDtree
         if (m.points.size() > 0) {
             for (auto& pt : m.points) {
-                cv::Mat hPt = (cv::Mat_<float>(1,4) << pt->xyz[0], pt->xyz[1], pt->xyz[2], 1);
-                hPt = keyframe->pose * hPt.t();
+                std::vector<float> xyz = pt->getCoords();
+                cv::Mat hPt = (cv::Mat_<float>(1,4) << xyz[0], xyz[1], xyz[2], 1);
+                hPt = keyframe->getPose() * hPt.t();
                 hPt.t();
                 hPt /= hPt.at<float>(3);
                 cv::Mat projPt = (cv::Mat_<float>(1,2) << (hPt.at<float>(0) / hPt.at<float>(2)), (hPt.at<float>(1) / hPt.at<float>(2))); 
@@ -199,6 +200,7 @@ void Init::processFrames() {
         int cnt = 0;
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
+                int idx = goodMatches[i].trainIdx;
                 /*
                 if (!m.frames.empty()) {
                     if (std::find(m.frames.back()->desc.begin(), m.frames.back()->desc.end(), goodMatches[i].queryIdx) != m.frames.back()->desc.end()) {
@@ -217,10 +219,8 @@ void Init::processFrames() {
                     int index = indices.at<int>(0);
                     if(!dists.empty() && index > 0 && index < m.points.size()) {
                         Point* pt = m.points[index];
-                        int idx = goodMatches[i].trainIdx;
-                        pt->obs[keyframe] = keyframe->kp.size();
-                        keyframe->kp.push_back(keypoints2[idx]);
-                        keyframe->desc.push_back(idx);
+                        pt->addObservation(keyframe, keyframe->getKpSize());
+                        keyframe->addKeypoint(keypoints2[idx], idx);
                         cnt++;
                         continue;
                     }
@@ -273,11 +273,9 @@ void Init::processFrames() {
                 temp.push_back(goodMatches[i]);
 
                 if (-s3DPoint.at<float>(2,0) < th && (s3DPoint.at<float>(2,0) - (-th)) < 10) {
-                    int idx = goodMatches[i].trainIdx;
                     Point* pt = new Point(m.points.size(), s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0));
-                    pt->obs[keyframe] = keyframe->kp.size();
-                    keyframe->kp.push_back(keypoints2[idx]);
-                    keyframe->desc.push_back(idx);
+                    pt->addObservation(keyframe, keyframe->getKpSize());
+                    keyframe->addKeypoint(keypoints2[idx], idx);
                     m.points.push_back(pt);
                 }
             }

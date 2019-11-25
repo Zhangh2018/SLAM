@@ -82,16 +82,36 @@ Map::Map() {
 
 
 void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
-    for (auto f : frames) {
-        pose3d.push_back(fromCV2GLM(f->pose));
+    for (auto f : getFrames()) {
+        pose3d.push_back(fromCV2GLM(f->getPose()));
     }
-    for (auto pt : points) {
-            p3D.push_back(pt->xyz[0]);
-            p3D.push_back(pt->xyz[1]);
-            p3D.push_back(pt->xyz[2]);
+    for (auto pt : getPoints()) {
+        std::vector<float> xyz = pt->getCoords();
+        p3D.push_back(pt->xyz[0]);
+        p3D.push_back(pt->xyz[1]);
+        p3D.push_back(pt->xyz[2]);
     }
 }
 
+void Map::addPoint(Point* pt) {
+     std::unique_lock<std::mutex> lock(mutexPoints);
+     points.push_back(pt);
+}
+
+std::vector<Point*> Map::getPoints() {
+     std::unique_lock<std::mutex> lock(mutexPoints);
+     return points;
+}
+
+void Map::addFrame(KeyFrame* frame) {
+     std::unique_lock<std::mutex> lock(mutexFrames);
+     frames.push_back(frame);
+}
+
+std::vector<KeyFrame*> Map::getFrames() {
+    std::unique_lock<std::mutex> lock(mutexFrames);
+    return frames;
+}
 
 void Map::run() {
     std::vector<float> p3D;
@@ -254,38 +274,6 @@ void processInput(GLFWwindow *window)
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 }
-
-std::vector<float> Frustum() {
-
-    std::vector<float> frustumModel{
-         -0.05f, 0.05f, -0.05f,
-         0.05f, 0.05f, -0.05f,
-         0.0f, 0.0f, 0.0f,
-
-         0.0f, 0.0f, -0.0f,
-         0.05f, 0.0f, -0.05f,
-         0.05f, 0.05f, -0.05f,
-
-         0.0f, 0.0f, -0.0f,
-         -0.05f, 0.0f , -0.05f,
-         -0.05f, 0.05f, -0.05f,
-
-         0.0f, 0.0f, 0.0f,
-         -0.05f, 0.0f, -0.05f,
-         0.05f, 0.0f, -0.05f,
-
-         -0.05f, 0.05f, -0.05f,
-         0.05f, 0.0f, -0.05f,
-         0.05f, 0.0f, -0.05f,
-
-         -0.05f, 0.05f, -0.05f,
-         0.05f, 0.05f, -0.05f,
-         0.05f, 0.0f, -0.05f
-    };
-      
-    return frustumModel;
-}
-
 
 glm::mat4 fromCV2GLM(const cv::Mat& cvmat) {
    	glm::mat4 temp;

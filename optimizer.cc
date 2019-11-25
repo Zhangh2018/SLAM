@@ -25,7 +25,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         KeyFrame* kf = m.frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
-        SE3->setEstimate(toSE3Quat(kf->pose));
+        SE3->setEstimate(toSE3Quat(kf->getPose()));
         SE3->setId(kf->id);
         SE3->setFixed(kf->id == 0);
         optimizer.addVertex(SE3);
@@ -38,18 +38,18 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
     for (int i = 0; i < m.points.size(); i++) {
         Point* pt  = m.points[i];
         g2o::VertexSBAPointXYZ* Point = new g2o::VertexSBAPointXYZ();
-        Point->setEstimate(toVector3d(pt->xyz));
+        Point->setEstimate(toVector3d(pt->getCoords()));
         int id = pt->id + maxId + 1;
         Point->setId(id);
         Point->setMarginalized(true);
         optimizer.addVertex(Point);
         
         // adding observations as edges
-        for (auto& it: pt->obs) {
+        for (auto& it: pt->getObservations()) {
             KeyFrame* kf = it.first;
             if (kf->bad) continue;
             Eigen::Matrix<double,2,1> obs;
-            cv::KeyPoint kp = kf->kp[it.second];
+            cv::KeyPoint kp = kf->getKeypoint[it.second];
             obs << kp.pt.x, kp.pt.y;
 
             g2o::EdgeSE3ProjectXYZ* e = new g2o::EdgeSE3ProjectXYZ();
@@ -84,14 +84,14 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(kf->id));
         g2o::SE3Quat SE3quat = SE3->estimate();
-        kf->pose = toCvMat(SE3quat);
+        kf->setPose(toCvMat(SE3quat));
     }
 
     // Points
     for (int i = 0; i < m.points.size(); i++) {
         Point* pt = m.points[i];
         g2o::VertexSBAPointXYZ* Point = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pt->id + maxId + 1));
-        pt->xyz = toStdVector(Point->estimate());
+        pt->setCoords(toStdVector(Point->estimate()));
     }
 }
 
