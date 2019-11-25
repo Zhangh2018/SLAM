@@ -117,6 +117,7 @@ void Init::processFrames(Map& m) {
         std::vector<Point*> points = m.getPoints(); 
         if (frames.size() > 4) TRACKING = true;
         KeyFrame* keyframe = new KeyFrame(&K, frames.size());
+        std::cout << "***** Frame: " << keyframe->id << " *****" << std::endl;
         cap >> frame;
         if (frame.empty()) break;
         cv::resize(frame, frame, cv::Size(), 0.75, 0.75);
@@ -125,7 +126,9 @@ void Init::processFrames(Map& m) {
         matches.clear();
         extractKeyPoints(frame, keypoints2, descriptors2);
         matcher->knnMatch(descriptors1, descriptors2, matches, 2);
-        std::cout << "keypoints1: " << keypoints1.size() << " keypoints2: " << keypoints2.size() << " matches: " << matches.size() << std::endl;
+        std::cout << "keypoints1:                 " << keypoints1.size() << std::endl;
+        std::cout << "keypoints2:                 " << keypoints2.size() << std::endl;
+        std::cout << "matches:                    " << matches.size() << std::endl;
 
         // for some reason working better without normalizarion
         //cv::Mat T1, T2;
@@ -145,7 +148,7 @@ void Init::processFrames(Map& m) {
                 pMatches2.push_back(keypoints2[matches[i][0].trainIdx].pt);
 		   	}
         }
-        std::cout << "good matches: " << goodMatches.size() << std::endl;
+        std::cout << "good matches:               " << goodMatches.size() << std::endl;
         mask.clear();
         cv::Mat F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
         F.convertTo(F, CV_32F);
@@ -211,7 +214,7 @@ void Init::processFrames(Map& m) {
                     cv::flann::Index flann_index(ptsMat, cv::flann::KDTreeIndexParams(1));
                     cv::Mat query = (cv::Mat_<float>(1,2) << keypoints2[goodMatches[i].trainIdx].pt.x, keypoints2[goodMatches[i].trainIdx].pt.y);
                     cv::Mat indices, dists;
-                    flann_index.radiusSearch(query, indices, dists, 1, 5.0f, cv::flann::SearchParams());
+                    flann_index.radiusSearch(query, indices, dists, 1, 6.0f, cv::flann::SearchParams());
 
                     int index = indices.at<int>(0);
                     if(!dists.empty() && index > 0 && index < points.size()) {
@@ -278,14 +281,14 @@ void Init::processFrames(Map& m) {
                 }
             }
         }
-        std::cout << "Number of points: " << points.size() << std::endl;
-        std::cout << "Number of already added points " << cnt << std::endl;
+        std::cout << "Number of map points:       " << points.size() << std::endl;
+        std::cout << "Number of added map points: " << cnt << std::endl;
 
         if (keyframe->getKpSize() < 50) keyframe->bad = true;
         m.addFrame(keyframe);
 
         goodMatches = temp;
-        std::cout << "good matches after RANSAC: " << goodMatches.size() << std::endl;
+        std::cout << "good matches after tests:   " << goodMatches.size() << std::endl;
 
         if (frames.size() % 20 == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
