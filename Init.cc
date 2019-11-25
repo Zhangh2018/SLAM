@@ -104,7 +104,6 @@ void Init::processFrames(Map& m) {
 
     std::vector<cv::DMatch> goodMatches;
     std::vector<cv::Point2f> pMatches1, pMatches2;
-    cv::Mat T12, T21;
     std::vector<uchar> mask;
 
     extractKeyPoints(frame, keypoints1, descriptors1);
@@ -199,6 +198,7 @@ void Init::processFrames(Map& m) {
                 hPt = keyframe->getPose() * hPt.t();
                 hPt.t();
                 hPt /= hPt.at<float>(3);
+                if (hPt.at<float>(2) > th) continue;
                 cv::Mat projPt = (cv::Mat_<float>(1,2) << (hPt.at<float>(0) / hPt.at<float>(2)), (hPt.at<float>(1) / hPt.at<float>(2))); 
                 ptsMat.push_back(projPt);
             }
@@ -214,7 +214,7 @@ void Init::processFrames(Map& m) {
                     cv::flann::Index flann_index(ptsMat, cv::flann::KDTreeIndexParams(1));
                     cv::Mat query = (cv::Mat_<float>(1,2) << keypoints2[goodMatches[i].trainIdx].pt.x, keypoints2[goodMatches[i].trainIdx].pt.y);
                     cv::Mat indices, dists;
-                    flann_index.radiusSearch(query, indices, dists, 1, 6.0f, cv::flann::SearchParams());
+                    flann_index.radiusSearch(query, indices, dists, 1, 5.0f, cv::flann::SearchParams(16));
 
                     int index = indices.at<int>(0);
                     if(!dists.empty() && index > 0 && index < points.size()) {
