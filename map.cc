@@ -57,23 +57,23 @@ Map::Map() {
         return;
     }
 
-	glfwWindowHint(GLFW_SAMPLES, 4); // 4x antialiasing
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); // We want OpenGL 3.3
+	glfwWindowHint(GLFW_SAMPLES, 4); 
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // To make MacOS happy; should not be needed
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // We don't want the old OpenGL 
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // for macOS 
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); 
 	window = glfwCreateWindow(H, W, "01", NULL, NULL);
 	if( window == NULL ){ fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
 	    glfwTerminate();
 	    return;
 	}
-    glfwMakeContextCurrent(window); // Initialize GLEW
-	glewExperimental=true; // Needed in core profile
+    // Initialize GLEW
+    glfwMakeContextCurrent(window);
+	glewExperimental = true;
 	if (glewInit() != GLEW_OK) {
 	    fprintf(stderr, "Failed to initialize GLEW\n");
 	    return;
 	}
-    // Ensure we can capture the escape key being pressed below
     glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
     glfwSetCursorPosCallback(window, mouse_callback);
 
@@ -183,7 +183,6 @@ void Map::run() {
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0); 
         
-
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
@@ -194,35 +193,41 @@ void Map::run() {
         // activate shader
         ourShader->use();
 
-        // pass projection matrix to shader (note that in this case it could change every frame)
+        // pass projection matrix to shader
         glm::mat4 projection = glm::perspective(glm::radians(fov), H / W, 0.1f, 10.0f);
         ourShader->setMat4("projection", projection);
 
-        // camera/view transformation
+        // camera/view/model transformation
         glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
         ourShader->setMat4("view", view);
         
-        glm::mat4 model = glm::mat4(1.0f); // make sure to initialize matrix to identity matrix first
+        glm::mat4 model = glm::mat4(1.0f); 
         ourShader->setMat4("model", model);
         
+        // Bind VBO and VAO
         glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
         glBindVertexArray(pointsArray);
+
+        // Draw
         glDrawArrays(GL_POINTS, 0, p3D.size());
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         
+        // Initialize and use shader
         Shader* shader1 = new Shader("frustum.vs", "frustum.fs");
-        
         shader1->use();
         shader1->setMat4("projection", projection);
         shader1->setMat4("view", view);
 
+        // Bind VBO and VAO
         glBindBuffer(GL_ARRAY_BUFFER, frustumBuffer);
         glBindVertexArray(frustumArray);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         
+        // Draw
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * 3, pose3d.size());
 
+        // Unbind VBO and VAO
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         
@@ -235,49 +240,48 @@ void Map::run() {
     }
 }
 
-void mouse_callback(GLFWwindow* window, double xpos, double ypos)
-{
-  if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) 
-  {
-      firstMouse = true;
-      return;
-  }
+// Handler for changing view angle 
+void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
+        firstMouse = true;
+        return;
+    }
 
-  if (firstMouse)
-  {
-      lastX = xpos;
-      lastY = ypos;
-      firstMouse = false;
-  }
+    if (firstMouse) {
+        lastX = xpos;
+        lastY = ypos;
+        firstMouse = false;
+    }
 
-  float xoffset = xpos - lastX;
-  float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-  lastX = xpos;
-  lastY = ypos;
+    float xoffset = xpos - lastX;
+    // reversed since y-coordinates go from bottom to top
+    float yoffset = lastY - ypos; 
+    lastX = xpos;
+    lastY = ypos;
 
-  float sensitivity = 0.1f; // change this value to your liking
-  xoffset *= sensitivity;
-  yoffset *= sensitivity;
+    float sensitivity = 0.1f; 
+    xoffset *= sensitivity;
+    yoffset *= sensitivity;
 
-  yaw += xoffset;
-  pitch += yoffset;
+    yaw += xoffset;
+    pitch += yoffset;
 
-  // make sure that when pitch is out of bounds, screen doesn't get flipped
-  if (pitch > 89.0f)
-    pitch = 89.0f;
-  if (pitch < -89.0f)
-    pitch = -89.0f;
+    // make sure that when pitch is out of bounds, screen doesn't get flipped
+    if (pitch > 89.0f)
+        pitch = 89.0f;
+    if (pitch < -89.0f)
+        pitch = -89.0f;
 
-   glm::vec3 front;
-   front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-   front.y = sin(glm::radians(pitch));
-   front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-   cameraFront = glm::normalize(front);
+    glm::vec3 front;
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+    cameraFront = glm::normalize(front);
 
 }
 
-void processInput(GLFWwindow *window)
-{
+// Handler for camera movement
+void processInput(GLFWwindow *window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
