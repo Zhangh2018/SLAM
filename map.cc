@@ -1,13 +1,10 @@
 #include "map.h"
 
-float H = 1280.0f * 0.75f;
-float W = 720.0f * 0.75f;
-
 bool firstMouse = true;
 float yaw   = -90.0f;	// yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right so we initially rotate a bit to the left.
 float pitch =  0.0f;
-float lastX =  H / 2.0f;
-float lastY =  W / 2.0f;
+float lastX = 0; 
+float lastY = 0;
 float fov   =  90.0f;
 
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -48,7 +45,7 @@ std::vector<float> frustumModel{
 	0.05f, 0.0f, -0.05f
 };
 
-Map::Map() {
+Map::Map(float _H, float _W) {
     // Initialise GLFW
     glewExperimental = true; // Needed for core profile
     if( !glfwInit() )
@@ -57,12 +54,15 @@ Map::Map() {
         return;
     }
 
+    H = _H;
+    W = _W;
+
 	glfwWindowHint(GLFW_SAMPLES, 4); 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); 
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // for macOS 
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); 
-	window = glfwCreateWindow(H, W, "01", NULL, NULL);
+	window = glfwCreateWindow(W, H, "01", NULL, NULL);
 	if( window == NULL ){ fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
 	    glfwTerminate();
 	    return;
@@ -78,18 +78,23 @@ Map::Map() {
     glfwSetCursorPosCallback(window, mouse_callback);
 
     ourShader = new Shader("camera.vs", "camera.fs");
+
+    lastX = H / 2.0f;
+    lastY = W / 2.0f;
 };
 
 
 void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
     for (auto f : getFrames()) {
-        pose3d.push_back(fromCV2GLM(f->getPose()));
+        cv::Mat pose = f->getPose(); 
+        pose.at<float>(0,3) = -pose.at<float>(0,3);
+        pose3d.push_back(fromCV2GLM(pose));
     }
     for (auto pt : getPoints()) {
         std::vector<float> xyz = pt->getCoords();
         p3D.push_back(xyz[0]);
-        p3D.push_back(xyz[1]);
-        p3D.push_back(xyz[2]);
+        p3D.push_back(-xyz[1]);
+        p3D.push_back(-xyz[2]);
     }
 }
 
@@ -101,6 +106,11 @@ void Map::addPoint(Point* pt) {
 std::vector<Point*> Map::getPoints() {
      std::unique_lock<std::mutex> lock(mutexPoints);
      return points;
+}
+
+int Map::getPointsSize() {
+     std::unique_lock<std::mutex> lock(mutexPoints);
+     return points.size();
 }
 
 void Map::addFrame(KeyFrame* frame) {
@@ -194,7 +204,7 @@ void Map::run() {
         ourShader->use();
 
         // pass projection matrix to shader
-        glm::mat4 projection = glm::perspective(glm::radians(fov), H / W, 0.1f, 10.0f);
+        glm::mat4 projection = glm::perspective(glm::radians(fov), W / H, 0.1f, 10.0f);
         ourShader->setMat4("projection", projection);
 
         // camera/view/model transformation

@@ -57,13 +57,15 @@ void Init::decomposeE(const cv::Mat& E, cv::Mat& R, cv::Mat& t) {
         R = -R;
 }
 
-Init::Init(cv::VideoCapture& _cap, const int _nfeatures, const int _thold) {
+Init::Init(cv::VideoCapture& _cap, const int _nfeatures, const int _thold, float _H, float _W) {
     cap = _cap;
     nfeatures = _nfeatures;
     thold = _thold;
     detector = cv::FastFeatureDetector::create(thold);
     desc = cv::ORB::create(nfeatures, 1.2f, 8, 31, 0, 2, cv::ORB::FAST_SCORE, 31, 20);
     matcher = new cv::BFMatcher(cv::NORM_HAMMING, false);
+    H = _H;
+    W = _W;
     //matcher = new cv::FlannBasedMatcher(cv::makePtr<cv::flann::LshIndexParams>(12, 20, 2));
 
 }
@@ -75,7 +77,7 @@ void Init::extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints,
 }
 
 void Init::process() {
-    Map m;
+    Map m(H,W);
     std::thread t1(&Init::processFrames, this, std::ref(m));
     m.run();
 }
@@ -83,9 +85,9 @@ void Init::process() {
 void Init::processFrames(Map& m) {
     //instrisic params
     float f, cx, cy;
-    f = 700.0f;
-    cx = 1280.0f * 0.75f / 2.0f;
-    cy = 720.0f * 0.75f / 2.0f;
+    f = 984.0f;
+    cx = W / 2.0f; //1280.0f * 0.75f / 2.0f;
+    cy = H / 2.0f; // cy = 720.0f * 0.75f / 2.0f;
 
     //intrinsic matrix
     cv::Mat K = cv::Mat::eye(3,3,CV_32F);
@@ -96,7 +98,7 @@ void Init::processFrames(Map& m) {
 
     cv::Mat frame;
     cap >> frame;
-    cv::resize(frame, frame, cv::Size(), 0.75, 0.75);
+    cv::resize(frame, frame, cv::Size(), 0.99, 0.99);
 
     std::vector<cv::KeyPoint> keypoints1, keypoints2;
     cv::Mat descriptors1, descriptors2;
@@ -119,7 +121,7 @@ void Init::processFrames(Map& m) {
         std::cout << "***** Frame: " << keyframe->id << " *****" << std::endl;
         cap >> frame;
         if (frame.empty()) break;
-        cv::resize(frame, frame, cv::Size(), 0.75, 0.75);
+        cv::resize(frame, frame, cv::Size(), 0.99, 0.99);
  
         keypoints2.clear();
         matches.clear();
@@ -160,7 +162,6 @@ void Init::processFrames(Map& m) {
         R.convertTo(R, CV_32F);
         t.convertTo(t, CV_32F);
 		t /= 10;
-		//R = R.t();
 
         // Camera 1 Projection Matrix K[I|0]
         cv::Mat P1(3,4,CV_32F,cv::Scalar(0));
@@ -173,55 +174,54 @@ void Init::processFrames(Map& m) {
         t.copyTo(P2.rowRange(0,3).col(3));
         cv::Mat O2 = -R.t()*t;
 
+        R = R.t();
         cv::Mat QQ = cv::Mat::eye(4,4,CV_32F);
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
         t.copyTo(QQ.rowRange(0,3).col(3));
+        R = R.t();
+           
+        cv::Mat K4x4 = cv::Mat::eye(4,4,CV_32F); 
+        K.copyTo(K4x4.rowRange(0,3).colRange(0,3));
 
         if (frames.empty())
             keyframe->setPose(QQ); 
         else
 		    keyframe->setPose(frames.back()->getPose() * QQ);
 
-        float th = keyframe->getPose().at<float>(3,2);
+        float th = keyframe->getPose().at<float>(2,3);
+        std::cout << th << std::endl;
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
         std::vector<cv::DMatch> temp;
         cv::Mat s3DPoint;
-        cv::Mat ptsMat;
 
-        // projecting map points with current pose to xy space and make them compatible for KDtree
-        if (points.size() > 0) {
-            for (auto& pt : points) {
-                std::vector<float> xyz = pt->getCoords();
-                cv::Mat hPt = (cv::Mat_<float>(1,4) << xyz[0], xyz[1], xyz[2], 1);
-                hPt = keyframe->getPose() * hPt.t();
-                hPt.t();
-                hPt /= hPt.at<float>(3);
-                if (hPt.at<float>(2) > th) continue;
-                cv::Mat projPt = (cv::Mat_<float>(1,2) << (hPt.at<float>(0) / hPt.at<float>(2)), (hPt.at<float>(1) / hPt.at<float>(2))); 
-                ptsMat.push_back(projPt);
-            }
-        }
         // mask is 1-d vector checking X'FX = 0
         int cnt = 0;
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
                 int idx = goodMatches[i].trainIdx;
 
-                // adding points to KDTree and searching in matches already added map points
-                if (!ptsMat.empty()) {
-                    cv::flann::Index flann_index(ptsMat, cv::flann::KDTreeIndexParams(1));
-                    cv::Mat query = (cv::Mat_<float>(1,2) << keypoints2[goodMatches[i].trainIdx].pt.x, keypoints2[goodMatches[i].trainIdx].pt.y);
-                    cv::Mat indices, dists;
-                    flann_index.radiusSearch(query, indices, dists, 1, 5.0f, cv::flann::SearchParams(16));
-
-                    int index = indices.at<int>(0);
-                    if(!dists.empty() && index > 0 && index < points.size()) {
-                        Point* pt = points[index];
-                        pt->addObservation(keyframe, keyframe->getKpSize());
-                        keyframe->addKeypoint(keypoints2[idx], idx);
+                if (!points.empty()) {
+                    bool flag = false;
+                    double minDistance = DBL_MAX;
+                    int mPoint = 0; 
+                    for (int j = 0; j < points.size(); j++)  {
+                        if (points[j]->getCoords()[2] < -th) continue;
+                        double distance = cv::norm(points[j]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
+                        if (distance <= 64) { 
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                mPoint = j;
+                            }
+                            flag = true;
+                        }
+                    }
+                    if (flag) {
+                        points[mPoint]->addObservation(keyframe, keyframe->getKpSize());
+                        keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
                         cnt++;
+                        points.erase(points.begin() + mPoint);
                         continue;
                     }
                 }
@@ -256,8 +256,7 @@ void Init::processFrames(Map& m) {
 
                 float squareError1 = (im1x-kp1x)*(im1x-kp1x)+(im1y-kp1y)*(im1y-kp1y);
 
-                if(squareError1 > 4)
-                    continue;
+                if(squareError1 > 4) continue;
 
                 // Check reprojection error in second image
                 float im2x, im2y;
@@ -267,33 +266,31 @@ void Init::processFrames(Map& m) {
 
                 float squareError2 = (im2x-kp2x)*(im2x-kp2x)+(im2y-kp2y)*(im2y-kp2y);
 
-                if(squareError2 > 4)
-                    continue;
+                if(squareError2 > 4) continue;
 
                 temp.push_back(goodMatches[i]);
 
-                if (-s3DPoint.at<float>(2,0) < th && (s3DPoint.at<float>(2,0) - (-th)) < 10) {
-                    Point* pt = new Point(points.size(), s3DPoint.at<float>(0,0), -s3DPoint.at<float>(1,0), -s3DPoint.at<float>(2,0));
+                if (s3DPoint.at<float>(2,0) > -th && cv::norm(-s3DPoint.at<float>(2,0) - th) < 5) {
+                    Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx));
                     pt->addObservation(keyframe, keyframe->getKpSize());
-                    keyframe->addKeypoint(keypoints2[idx], idx);
-                    points.push_back(pt);
+                    keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
                     m.addPoint(pt);
                 }
             }
         }
-        std::cout << "Number of map points:       " << points.size() << std::endl;
+        std::cout << "Number of map points:       " << m.getPointsSize() << std::endl;
         std::cout << "Number of added map points: " << cnt << std::endl;
 
-        if (keyframe->getKpSize() < 50) keyframe->bad = true;
+        //if (keyframe->getKpSize() < 100) keyframe->bad = true;
         m.addFrame(keyframe);
 
         goodMatches = temp;
         std::cout << "good matches after tests:   " << goodMatches.size() << std::endl;
 
-        if (frames.size() % 20 == 0 && frames.size() > 0) {
+        if (frames.size() % 10 == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
-            optimizer.BundleAdjustment(m, 10);
+            optimizer.BundleAdjustment(m, 15);
         }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);

@@ -10,9 +10,11 @@
 
 class Init {
 public:
-    Init(cv::VideoCapture& cap, const int nfeatures, const int thold);
+    Init(cv::VideoCapture& cap, const int nfeatures, const int thold, float H, float W);
     void process();
     void processFrames(Map& m);
+    float H;
+    float W;
 private:
     void extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors);
     void drawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints_1, std::vector<cv::KeyPoint>& keypoints_2, std::vector<cv::DMatch>& matches);

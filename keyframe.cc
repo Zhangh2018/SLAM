@@ -3,11 +3,12 @@
 
 // Point
 
-Point::Point(int _id, float x, float y, float z) {
+Point::Point(int _id, float x, float y, float z, cv::Mat _desc) {
     xyz.push_back(x);
     xyz.push_back(y);
     xyz.push_back(z);
     id = _id;
+    desc = _desc;
 }
 
 void Point::setCoords(float x, float y, float z) {
@@ -37,6 +38,10 @@ std::map<KeyFrame*, int> Point::getObservations() {
     return obs;
 }
 
+cv::Mat Point::getDesc() {
+    return desc;
+}
+
 
 // KeyFrame
 
@@ -52,13 +57,13 @@ void KeyFrame::setPose(cv::Mat _pose) {
 
 cv::Mat KeyFrame::getPose() {
     std::unique_lock<std::mutex> lock(mutexPose);
-    return pose;
+    return pose.clone();
 }
 
-void KeyFrame::addKeypoint(cv::KeyPoint keypoint, int idx) {
+void KeyFrame::addKeypoint(cv::KeyPoint keypoint, cv::Mat _desc) {
     std::unique_lock<std::mutex> lock(mutexKeypoint);
     kp.push_back(keypoint);
-    desc.push_back(idx);
+    desc.push_back(_desc);
 }
 
 cv::KeyPoint KeyFrame::getKeypoint(int idx) {

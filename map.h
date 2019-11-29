@@ -23,18 +23,22 @@
 class Map {
 
 public:
-    Map();
+    Map(float H, float W);
     void run();
     void prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d);
 
     void addPoint(Point* pt);
     std::vector<Point*> getPoints();
+    int getPointsSize();
 
     void addFrame(KeyFrame* frame);
     std::vector<KeyFrame*> getFrames();
 
     void setCVFrame(cv::Mat frame);
     cv::Mat getCVFrame();
+
+    float H;
+    float W;
 
 private:
     std::vector<KeyFrame*> frames;

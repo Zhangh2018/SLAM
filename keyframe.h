@@ -12,7 +12,7 @@ class KeyFrame;
 
 class Point {
 public:
-    Point(int id, float x, float y, float z);
+    Point(int id, float x, float y, float z, cv::Mat desc);
     int id;
 
 public:
@@ -21,10 +21,12 @@ public:
     std::vector<float> getCoords();
     void addObservation(KeyFrame* kf, int idx);
     std::map<KeyFrame*, int> getObservations();
+    cv::Mat getDesc();
 
 private:
     std::vector<float> xyz;
     std::map<KeyFrame*, int> obs;
+    cv::Mat desc;
     std::mutex mutexPoint;
     std::mutex mutexObservation;
 };
@@ -37,7 +39,7 @@ public:
     
     void setPose(cv::Mat pose);
     cv::Mat getPose();
-    void addKeypoint(cv::KeyPoint kp, int desc);
+    void addKeypoint(cv::KeyPoint kp, cv::Mat desc);
     cv::KeyPoint getKeypoint(int idx);
     int getKpSize();
 
@@ -49,7 +51,7 @@ public:
 private:
     cv::Mat pose;
     std::vector<cv::KeyPoint> kp;
-    std::vector<int> desc;
+    std::vector<cv::Mat> desc;
 
     std::mutex mutexPose;
     std::mutex mutexKeypoint;

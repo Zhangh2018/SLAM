@@ -11,6 +11,7 @@ std::vector<float> toStdVector(const Eigen::Matrix<double,3,1> &m);
 
 void Optimizer::BundleAdjustment(Map& m, int iter) {
     g2o::SparseOptimizer optimizer;
+    optimizer.setVerbose(true);
     g2o::BlockSolverX::LinearSolverType* linearSolver;
 
     linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
@@ -30,11 +31,11 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
         SE3->setEstimate(toSE3Quat(kf->getPose()));
         SE3->setId(kf->id);
-        SE3->setFixed(kf->id == 0);
+        SE3->setFixed(kf->id <= 1);
         optimizer.addVertex(SE3);
     }
 
-    const int maxId = frames.size();
+    int maxId = frames.size();
     const float thHuber = sqrt(5.991);
     
     // adding points as vertices
@@ -69,8 +70,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
 
             e->fx = kf->K->at<float>(0,0);
             e->fy = kf->K->at<float>(1,1);
-            e->cx = kf->K->at<float>(2,0);
-            e->cx = kf->K->at<float>(2,1);
+            e->cx = kf->K->at<float>(0,2);
+            e->cy = kf->K->at<float>(1,2);
 
             optimizer.addEdge(e);
         }
