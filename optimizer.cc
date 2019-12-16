@@ -12,13 +12,12 @@ std::vector<float> toStdVector(const Eigen::Matrix<double,3,1> &m);
 void Optimizer::BundleAdjustment(Map& m, int iter) {
     g2o::SparseOptimizer optimizer;
     optimizer.setVerbose(true);
-    g2o::BlockSolverX::LinearSolverType* linearSolver;
+    std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver;
+    linearSolver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
+    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(
+        g2o::make_unique<g2o::BlockSolver_6_3>(std::move(linearSolver))
+    );
 
-    linearSolver = new g2o::LinearSolverEigen<g2o::BlockSolverX::PoseMatrixType>();
-
-    g2o::BlockSolverX* solver_ptr = new g2o::BlockSolverX(linearSolver);
-
-    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
     optimizer.setAlgorithm(solver);
 
     std::vector<Point*> points = m.getPoints();
@@ -31,7 +30,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
         SE3->setEstimate(toSE3Quat(kf->getPose()));
         SE3->setId(kf->id);
-        SE3->setFixed(kf->id <= 1);
+        SE3->setFixed(kf->id <= 0);
         optimizer.addVertex(SE3);
     }
 

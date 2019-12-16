@@ -189,7 +189,7 @@ void Init::processFrames(Map& m) {
 		    keyframe->setPose(frames.back()->getPose() * QQ);
 
         float th = keyframe->getPose().at<float>(2,3);
-        std::cout << th << std::endl;
+        //std::cout << th << std::endl;
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
@@ -201,13 +201,12 @@ void Init::processFrames(Map& m) {
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
                 int idx = goodMatches[i].trainIdx;
-
                 if (!points.empty()) {
                     bool flag = false;
                     double minDistance = DBL_MAX;
                     int mPoint = 0; 
                     for (int j = 0; j < points.size(); j++)  {
-                        if (points[j]->getCoords()[2] < -th) continue;
+                        //if (points[j]->getCoords()[2] < -th) continue;
                         double distance = cv::norm(points[j]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         if (distance <= 64) { 
                             if (distance < minDistance) {
@@ -228,20 +227,21 @@ void Init::processFrames(Map& m) {
                 triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
                 // checking if coordinates goes to infinity
                 if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
+
                 // checking paralax
                 cv::Mat norm1 = s3DPoint - O1;
                 float dist1 = cv::norm(norm1);
-
 
                 cv::Mat norm2 = s3DPoint - O2;
                 float dist2 = cv::norm(norm2);
 
                 float cosParallax = norm1.dot(norm2) / (dist1 * dist2);
 
-                if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+                //if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
                 cv::Mat s3DPoint2 = R*s3DPoint + t;
-                if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+                if (s3DPoint2.at<float>(2) <= 0) continue;
+                //if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
                 // Check reprojection error in first image
                 float im1x, im1y;
@@ -270,7 +270,7 @@ void Init::processFrames(Map& m) {
 
                 temp.push_back(goodMatches[i]);
 
-                if (s3DPoint.at<float>(2,0) > -th && cv::norm(-s3DPoint.at<float>(2,0) - th) < 5) {
+                if (cv::norm(s3DPoint.at<float>(2) + th) < 5) {
                     Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx));
                     pt->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
@@ -290,7 +290,7 @@ void Init::processFrames(Map& m) {
         if (frames.size() % 10 == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
-            optimizer.BundleAdjustment(m, 15);
+            optimizer.BundleAdjustment(m, 10);
         }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
