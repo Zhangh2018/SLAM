@@ -206,7 +206,6 @@ void Init::processFrames(Map& m) {
                     double minDistance = DBL_MAX;
                     int mPoint = 0; 
                     for (int j = 0; j < points.size(); j++)  {
-                        //if (points[j]->getCoords()[2] < -th) continue;
                         double distance = cv::norm(points[j]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         if (distance <= 64) { 
                             if (distance < minDistance) {
@@ -243,30 +242,17 @@ void Init::processFrames(Map& m) {
                 if (s3DPoint2.at<float>(2) <= 0) continue;
                 //if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
-                // Check reprojection error in first image
-                float im1x, im1y;
-                float invZ1 = 1.0/s3DPoint.at<float>(2,0);
-                im1x = f*s3DPoint.at<float>(0,0)*invZ1+cx;
-                im1y = f*s3DPoint.at<float>(1,0)*invZ1+cy;
+                // coords for reprojection err
                 float kp1x = keypoints1[goodMatches[i].queryIdx].pt.x;
                 float kp1y = keypoints1[goodMatches[i].queryIdx].pt.y;
                 float kp2x = keypoints2[goodMatches[i].trainIdx].pt.x;
                 float kp2y = keypoints2[goodMatches[i].trainIdx].pt.y;
 
-
-                float squareError1 = (im1x-kp1x)*(im1x-kp1x)+(im1y-kp1y)*(im1y-kp1y);
-
-                if(squareError1 > 4) continue;
+                // Check reprojection error in first image
+                if (reprojErr(kp1x, kp1y, cx, cy, f, s3DPoint)) continue;
 
                 // Check reprojection error in second image
-                float im2x, im2y;
-                float invZ2 = 1.0/s3DPoint2.at<float>(2,0);
-                im2x = f*s3DPoint2.at<float>(0,0)*invZ2+cx;
-                im2y = f*s3DPoint2.at<float>(1,0)*invZ2+cy;
-
-                float squareError2 = (im2x-kp2x)*(im2x-kp2x)+(im2y-kp2y)*(im2y-kp2y);
-
-                if(squareError2 > 4) continue;
+                if (reprojErr(kp2x, kp2y, cx, cy, f, s3DPoint2)) continue;
 
                 temp.push_back(goodMatches[i]);
 
@@ -350,7 +336,19 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
     T.at<float>(1,2) = -mY;
 }
 
+bool Init::reprojErr(float kpx, float kpy, float cx, float cy, float f, cv::Mat point) {
+    float imx, imy;
+    float invZ = 1.0 / point.at<float>(2,0);
+    imx = f*point.at<float>(0,0)*invZ + cx;
+    imy = f*point.at<float>(1,0)*invZ + cy;
+    
+    float squareError = (imx-kpx)*(imx-kpx)+(imy-kpy)*(imy-kpy);
+
+    if(squareError > 4) return true;
+    else return false;
+}
 
 void threadBA(Optimizer& opt, Map& m, int iter) {
     opt.BundleAdjustment(m, iter);
 }
+

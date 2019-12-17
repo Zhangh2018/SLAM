@@ -22,6 +22,8 @@ private:
     void triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d);
     void triangulate(const cv::Point2f& point1, const cv::Point2f& point2, cv::Mat& P1, cv::Mat& P2, cv::Mat& point3d);
     void decomposeE(const cv::Mat& E, cv::Mat& R, cv::Mat& t);
+
+    bool reprojErr(float kpx, float kpy, float cx, float cy, float f, cv::Mat point);
     // video wrapper
     cv::VideoCapture cap;
 
