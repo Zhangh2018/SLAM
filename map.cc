@@ -87,7 +87,8 @@ Map::Map(float _H, float _W) {
 void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
     for (auto f : getFrames()) {
         cv::Mat pose = f->getPose(); 
-        pose.at<float>(0,3) = -pose.at<float>(0,3);
+        pose.at<float>(1,3) = -pose.at<float>(1,3);
+        pose.at<float>(2,3) = -pose.at<float>(2,3);
         pose3d.push_back(fromCV2GLM(pose));
     }
     for (auto pt : getPoints()) {
@@ -162,7 +163,7 @@ void Map::run() {
         unsigned int instanceVBO;
         glGenBuffers(1, &instanceVBO);
         glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-        glBufferData(GL_ARRAY_BUFFER, 3 * sizeof(glm::mat4) * pose3d.size(), &pose3d.front(), GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * pose3d.size(), &pose3d.front(), GL_DYNAMIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         
         unsigned int frustumBuffer, frustumArray;
@@ -218,8 +219,8 @@ void Map::run() {
         glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
         glBindVertexArray(pointsArray);
 
-        // Draw
-        glDrawArrays(GL_POINTS, 0, p3D.size());
+        // Draw points
+        glDrawArrays(GL_POINTS, 0, p3D.size() / 3);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         
@@ -234,7 +235,7 @@ void Map::run() {
         glBindVertexArray(frustumArray);
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         
-        // Draw
+        // Draw poses
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6 * 3, pose3d.size());
 
         // Unbind VBO and VAO
