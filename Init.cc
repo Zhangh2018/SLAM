@@ -168,17 +168,16 @@ void Init::processFrames(Map& m) {
         K.copyTo(P1.rowRange(0,3).colRange(0,3));
         cv::Mat O1 = cv::Mat::zeros(3,1,CV_32F);
 
-        // Camera 2 Projection Matrix K[R|t]
+        // Camera 3 Projection Matrix K[R|t]
         cv::Mat P2(3,4,CV_32F, cv::Scalar(1));
         R.copyTo(P2.rowRange(0,3).colRange(0,3));
         t.copyTo(P2.rowRange(0,3).col(3));
         cv::Mat O2 = -R.t()*t;
 
-        R = R.t();
         cv::Mat QQ = cv::Mat::eye(4,4,CV_32F);
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
         t.copyTo(QQ.rowRange(0,3).col(3));
-        R = R.t();
+        QQ = QQ.inv();
            
         cv::Mat K4x4 = cv::Mat::eye(4,4,CV_32F); 
         K.copyTo(K4x4.rowRange(0,3).colRange(0,3));
@@ -189,28 +188,48 @@ void Init::processFrames(Map& m) {
 		    keyframe->setPose(frames.back()->getPose() * QQ);
 
         float th = keyframe->getPose().at<float>(2,3);
-        //std::cout << th << std::endl;
+        std::cout << th << std::endl;
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
         std::vector<cv::DMatch> temp;
         cv::Mat s3DPoint;
+        std::vector<int> rPoints;
+
+        // reproject map points
+        for (int i = 0; i < points.size(); ++i) {
+            std::vector<float> xyz = points[i]->getCoords();
+            if (xyz[2] < th) continue;
+            cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
+            pt = K4x4 * keyframe->getPose() * pt; 
+            pt /= pt.at<float>(3);
+            //if (pt.at<float>(2) <= 0) continue;
+            pt /= pt.at<float>(2);
+            if (pt.at<float>(0) <= 0 || pt.at<float>(0) >= W ||
+                pt.at<float>(1) <= 0 || pt.at<float>(1) >= H) continue;
+            rPoints.push_back(i);
+        }
+
+        std::cout << "Points size: " << points.size() << std::endl << "rPoints size: " << rPoints.size() << std::endl;
 
         // mask is 1-d vector checking X'FX = 0
         int cnt = 0;
         for (int i = 0; i < mask.size(); ++i) {
             if (mask[i]) {
                 int idx = goodMatches[i].trainIdx;
-                if (!points.empty()) {
+                if (!rPoints.empty()) {
                     bool flag = false;
                     double minDistance = DBL_MAX;
                     int mPoint = 0; 
-                    for (int j = 0; j < points.size(); j++)  {
-                        double distance = cv::norm(points[j]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
+                    int mIdx = 0;
+                    for (int j = 0; j < rPoints.size(); j++)  {
+                        int k = rPoints[j];
+                        double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         if (distance <= 64) { 
                             if (distance < minDistance) {
                                 minDistance = distance;
-                                mPoint = j;
+                                mPoint = k;
+                                mIdx = j;
                             }
                             flag = true;
                         }
@@ -219,7 +238,7 @@ void Init::processFrames(Map& m) {
                         points[mPoint]->addObservation(keyframe, keyframe->getKpSize());
                         keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
                         cnt++;
-                        points.erase(points.begin() + mPoint);
+                        rPoints.erase(rPoints.begin() + mIdx);
                         continue;
                     }
                 }
@@ -239,7 +258,7 @@ void Init::processFrames(Map& m) {
                 //if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
                 cv::Mat s3DPoint2 = R*s3DPoint + t;
-                if (s3DPoint2.at<float>(2) <= 0) continue;
+                //if (s3DPoint2.at<float>(2) <= 0) continue;
                 //if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
                 // coords for reprojection err
@@ -256,11 +275,12 @@ void Init::processFrames(Map& m) {
 
                 temp.push_back(goodMatches[i]);
 
-                if (cv::norm(s3DPoint.at<float>(2) + th) < 5) {
+                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 2) {
                     Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx));
                     pt->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
                     m.addPoint(pt);
+                    std::cout << s3DPoint << std::endl;
                 }
             }
         }

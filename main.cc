@@ -8,7 +8,7 @@ int main(int argc, char* argv[]) {
     H = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
     W = cap.get(cv::CAP_PROP_FRAME_WIDTH);
     
-    Init init(cap, 3000, 20, H, W);
+    Init init(cap, 1000, 30, H, W);
     init.process();
 
     cap.release();
