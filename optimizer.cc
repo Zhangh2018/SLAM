@@ -9,7 +9,7 @@ cv::Mat toCvMat(const g2o::SE3Quat &SE3);
 std::vector<float> toStdVector(const Eigen::Matrix<double,3,1> &m);
 
 
-void Optimizer::BundleAdjustment(Map& m, int iter) {
+void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
     g2o::SparseOptimizer optimizer;
     optimizer.setVerbose(true);
     std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> linearSolver;
@@ -20,8 +20,20 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
 
     optimizer.setAlgorithm(solver);
 
-    std::vector<Point*> points = m.getPoints();
-    std::vector<KeyFrame*> frames = m.getFrames();
+    std::vector<Point*> points;
+    std::vector<KeyFrame*> frames;
+
+    if (slice == 0) {
+        points = m.getPoints();
+        frames = m.getFrames();
+    } else {
+        std::vector<Point*> tempPoints = m.getPoints();
+        std::vector<KeyFrame*> tempFrames = m.getFrames();
+
+        points = {tempPoints.end() - slice, tempPoints.end()};
+        frames = {tempFrames.end() - slice, tempFrames.end()};
+
+    }
     
     // adding keyframes as vertices
     for (int i = 0; i < frames.size(); i++) {
@@ -30,7 +42,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
         SE3->setEstimate(toSE3Quat(kf->getPose()));
         SE3->setId(kf->id);
-        SE3->setFixed(kf->id <= 0);
+        SE3->setFixed(kf->id <= 1);
         optimizer.addVertex(SE3);
     }
 
@@ -51,6 +63,13 @@ void Optimizer::BundleAdjustment(Map& m, int iter) {
         // adding observations as edges
         for (auto& it: pt->getObservations()) {
             KeyFrame* kf = it.first;
+            if (slice != 0) {
+                int kfId = kf->id;
+                if (std::find_if(frames.begin(), frames.end(),
+                    [kfId](KeyFrame* k) {return k->id == kfId;}) == frames.end()) {
+                    continue;
+                }
+            }
             if (kf->bad) continue;
             Eigen::Matrix<double,2,1> obs;
             cv::KeyPoint kp = kf->getKeypoint(it.second);

@@ -42,6 +42,9 @@ public:
     void addKeypoint(cv::KeyPoint kp, cv::Mat desc);
     cv::KeyPoint getKeypoint(int idx);
     int getKpSize();
+    cv::Mat getRotation();
+    cv::Mat getTranslation();
+    cv::Mat getRt();
 
 public:
     cv::Mat* K;
@@ -56,6 +59,5 @@ private:
     std::mutex mutexPose;
     std::mutex mutexKeypoint;
 };
-
 
 #endif

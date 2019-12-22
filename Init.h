@@ -28,7 +28,7 @@ private:
     cv::VideoCapture cap;
 
     cv::Ptr<cv::FeatureDetector> detector;
-    cv::Ptr<cv::FeatureDetector> desc;
+    cv::Ptr<cv::Feature2D> desc;
     cv::Ptr<cv::DescriptorMatcher> matcher;
 
     int thold;

@@ -1,6 +1,7 @@
 #include "Init.h"
 
 void threadBA(Optimizer& opt, Map& m, int iter);
+float euclideanDistance(cv::Point2f pt1, cv::KeyPoint pt2); 
 
 void Init::triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d) {
     cv::Mat A(4,4, CV_32F);
@@ -62,8 +63,9 @@ Init::Init(cv::VideoCapture& _cap, const int _nfeatures, const int _thold, float
     nfeatures = _nfeatures;
     thold = _thold;
     detector = cv::FastFeatureDetector::create(thold);
-    desc = cv::ORB::create(nfeatures, 1.2f, 8, 31, 0, 2, cv::ORB::FAST_SCORE, 31, 20);
+    desc = cv::ORB::create(nfeatures, 1.2f, 8, 31, 0, 2, cv::ORB::FAST_SCORE, 31, thold);
     matcher = new cv::BFMatcher(cv::NORM_HAMMING, false);
+    //matcher = cv::DescriptorMatcher::create("BruteForce-Hamming");
     H = _H;
     W = _W;
     //matcher = new cv::FlannBasedMatcher(cv::makePtr<cv::flann::LshIndexParams>(12, 20, 2));
@@ -139,15 +141,15 @@ void Init::processFrames(Map& m) {
         goodMatches.clear();
         pMatches1.clear(); pMatches2.clear();
         // Lowe's ratio test
-		for (int i = 0; i < matches.size(); ++i) {
-			if (matches[i].size() < 2) break;
-		   	const float ratio = 0.75;
-		   	if (matches[i][0].distance < ratio * matches[i][1].distance) {
-		    	goodMatches.push_back(matches[i][0]);
-		    	// collecting points for compute fundamental matrix
+        for (int i = 0; i < matches.size(); ++i) {
+            if (matches[i].size() < 2) break;
+            const float ratio = 0.75;
+            if (matches[i][0].distance < ratio * matches[i][1].distance) {
+                goodMatches.push_back(matches[i][0]);
+                // collecting points for compute fundamental matrix
                 pMatches1.push_back(keypoints1[matches[i][0].queryIdx].pt);
                 pMatches2.push_back(keypoints2[matches[i][0].trainIdx].pt);
-		   	}
+            }
         }
         std::cout << "good matches:               " << goodMatches.size() << std::endl;
         mask.clear();
@@ -157,11 +159,11 @@ void Init::processFrames(Map& m) {
         cv::Mat E = K.t()*F*K;
         cv::Mat R, t;
         //decomposeE(E, R, t);
-		E.convertTo(E, CV_64F);
+        E.convertTo(E, CV_64F);
         cv::recoverPose(E, pMatches1, pMatches2, K, R, t, cv::noArray());
         R.convertTo(R, CV_32F);
         t.convertTo(t, CV_32F);
-		t /= 10;
+        //t /= 10;
 
         // Camera 1 Projection Matrix K[I|0]
         cv::Mat P1(3,4,CV_32F,cv::Scalar(0));
@@ -185,7 +187,7 @@ void Init::processFrames(Map& m) {
         if (frames.empty())
             keyframe->setPose(QQ); 
         else
-		    keyframe->setPose(frames.back()->getPose() * QQ);
+            keyframe->setPose(frames.back()->getPose() * QQ);
 
         float th = keyframe->getPose().at<float>(2,3);
         std::cout << th << std::endl;
@@ -194,20 +196,28 @@ void Init::processFrames(Map& m) {
 
         std::vector<cv::DMatch> temp;
         cv::Mat s3DPoint;
-        std::vector<int> rPoints;
+        std::vector<cv::Point2f> rPoints;
+        std::vector<int> rPointsIdx;
 
         // reproject map points
         for (int i = 0; i < points.size(); ++i) {
             std::vector<float> xyz = points[i]->getCoords();
             if (xyz[2] < th) continue;
+            cv::Mat kf = keyframe->getPose();
+            //kf.rowRange(0,3).col(3) *= 10;
             cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
-            pt = K4x4 * keyframe->getPose() * pt; 
+            pt = K4x4 * kf * pt; 
             pt /= pt.at<float>(3);
             //if (pt.at<float>(2) <= 0) continue;
             pt /= pt.at<float>(2);
             if (pt.at<float>(0) <= 0 || pt.at<float>(0) >= W ||
                 pt.at<float>(1) <= 0 || pt.at<float>(1) >= H) continue;
-            rPoints.push_back(i);
+            rPointsIdx.push_back(i);
+            rPoints.push_back(cv::Point2f(pt.at<float>(0), pt.at<float>(1)));
+        }
+
+        for (auto& pt : rPoints) {
+            cv::circle(frame, pt, 3, cv::Scalar(0,0,255));
         }
 
         std::cout << "Points size: " << points.size() << std::endl << "rPoints size: " << rPoints.size() << std::endl;
@@ -222,10 +232,11 @@ void Init::processFrames(Map& m) {
                     double minDistance = DBL_MAX;
                     int mPoint = 0; 
                     int mIdx = 0;
-                    for (int j = 0; j < rPoints.size(); j++)  {
-                        int k = rPoints[j];
+                    for (int j = 0; j < rPointsIdx.size(); j++)  {
+                        int k = rPointsIdx[j];
                         double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
-                        if (distance <= 64) { 
+                        float eDistance = euclideanDistance(rPoints[j], keypoints2[idx]);
+                        if (distance <= 64 && eDistance <= 16) { 
                             if (distance < minDistance) {
                                 minDistance = distance;
                                 mPoint = k;
@@ -239,6 +250,7 @@ void Init::processFrames(Map& m) {
                         keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
                         cnt++;
                         rPoints.erase(rPoints.begin() + mIdx);
+                        rPointsIdx.erase(rPointsIdx.begin() + mIdx);
                         continue;
                     }
                 }
@@ -275,12 +287,11 @@ void Init::processFrames(Map& m) {
 
                 temp.push_back(goodMatches[i]);
 
-                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 2) {
+                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
                     Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx));
                     pt->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
                     m.addPoint(pt);
-                    std::cout << s3DPoint << std::endl;
                 }
             }
         }
@@ -293,10 +304,10 @@ void Init::processFrames(Map& m) {
         goodMatches = temp;
         std::cout << "good matches after tests:   " << goodMatches.size() << std::endl;
 
-        if (frames.size() % 10 == 0 && frames.size() > 0) {
+        if (frames.size() % 20 == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
-            optimizer.BundleAdjustment(m, 10);
+            optimizer.BundleAdjustment(m, 20, 20);
         }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
@@ -369,6 +380,9 @@ bool Init::reprojErr(float kpx, float kpy, float cx, float cy, float f, cv::Mat 
 }
 
 void threadBA(Optimizer& opt, Map& m, int iter) {
-    opt.BundleAdjustment(m, iter);
+    opt.BundleAdjustment(m, iter, 0);
 }
 
+float euclideanDistance(cv::Point2f pt1, cv::KeyPoint pt2) {
+    return sqrt(pow(pt1.x - pt2.pt.x, 2) + pow(pt1.y - pt2.pt.y, 2));
+}

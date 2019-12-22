@@ -75,3 +75,24 @@ int KeyFrame::getKpSize() {
     std::unique_lock<std::mutex> lock(mutexKeypoint);
     return kp.size();
 }
+
+cv::Mat KeyFrame::getRotation() {
+    std::unique_lock<std::mutex> lock(mutexPose);
+    cv::Mat ret;
+    pose.rowRange(0,3).colRange(0,3).copyTo(ret);
+    return ret;
+}
+
+cv::Mat KeyFrame::getTranslation() {
+    std::unique_lock<std::mutex> lock(mutexPose);
+    cv::Mat ret;
+    pose.rowRange(0,3).col(3).copyTo(ret);
+    return ret;
+}
+
+cv::Mat KeyFrame::getRt() {
+    std::unique_lock<std::mutex> lock(mutexPose);
+    cv::Mat ret;
+    pose.rowRange(0,3).colRange(0,4).copyTo(ret);
+    return ret;
+}

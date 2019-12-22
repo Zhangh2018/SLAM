@@ -18,7 +18,7 @@
 class Optimizer {
 
 public:
-    void BundleAdjustment(Map& m, int iter);
+    void BundleAdjustment(Map& m, int iter, int slice);
 };
 
 #endif
