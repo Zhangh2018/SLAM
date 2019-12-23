@@ -27,27 +27,30 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         points = m.getPoints();
         frames = m.getFrames();
     } else {
-        std::vector<Point*> tempPoints = m.getPoints();
         std::vector<KeyFrame*> tempFrames = m.getFrames();
 
-        points = {tempPoints.end() - slice, tempPoints.end()};
-        frames = {tempFrames.end() - slice, tempFrames.end()};
-
+        points = m.getPoints();
+        frames = {tempFrames.end() - slice - 1, tempFrames.end()};
     }
+
+    std::cout << "Points: " << points.size() << " Frames: " << frames.size() << std::endl;
+
     
+    int maxId = 0;
     // adding keyframes as vertices
     for (int i = 0; i < frames.size(); i++) {
         KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
-        SE3->setEstimate(toSE3Quat(kf->getPose()));
+        SE3->setEstimate(toSE3Quat(kf->getPose().inv()));
         SE3->setId(kf->id);
         SE3->setFixed(kf->id <= 1);
         optimizer.addVertex(SE3);
+        if (kf->id > maxId) maxId = kf->id;
     }
 
-    int maxId = frames.size();
     const float thHuber = sqrt(5.991);
+    std::vector<int> ptsIdx;
     
     // adding points as vertices
     for (int i = 0; i < points.size(); i++) {
@@ -59,6 +62,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         Point->setId(id);
         Point->setMarginalized(true);
         optimizer.addVertex(Point);
+
+        bool flag = false;
         
         // adding observations as edges
         for (auto& it: pt->getObservations()) {
@@ -70,6 +75,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
                     continue;
                 }
             }
+            flag = true;
             if (kf->bad) continue;
             Eigen::Matrix<double,2,1> obs;
             cv::KeyPoint kp = kf->getKeypoint(it.second);
@@ -93,6 +99,11 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
 
             optimizer.addEdge(e);
         }
+        if (!flag) {
+            optimizer.removeVertex(Point);
+        } else {
+            ptsIdx.push_back(i);
+        }
     }
 
     optimizer.initializeOptimization();
@@ -111,8 +122,9 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
     }
 
     // Points
-    for (int i = 0; i < points.size(); i++) {
-        Point* pt = points[i];
+    for (int i = 0; i < ptsIdx.size(); i++) {
+        int idx = ptsIdx[i];
+        Point* pt = points[idx];
         g2o::VertexSBAPointXYZ* Point = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pt->id + maxId + 1));
         pt->setCoords(toStdVector(Point->estimate()));
     }

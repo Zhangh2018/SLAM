@@ -163,7 +163,7 @@ void Init::processFrames(Map& m) {
         cv::recoverPose(E, pMatches1, pMatches2, K, R, t, cv::noArray());
         R.convertTo(R, CV_32F);
         t.convertTo(t, CV_32F);
-        //t /= 10;
+        t /= 10;
 
         // Camera 1 Projection Matrix K[I|0]
         cv::Mat P1(3,4,CV_32F,cv::Scalar(0));
@@ -203,8 +203,7 @@ void Init::processFrames(Map& m) {
         for (int i = 0; i < points.size(); ++i) {
             std::vector<float> xyz = points[i]->getCoords();
             if (xyz[2] < th) continue;
-            cv::Mat kf = keyframe->getPose();
-            //kf.rowRange(0,3).col(3) *= 10;
+            cv::Mat kf = keyframe->getPose().inv();
             cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
             pt = K4x4 * kf * pt; 
             pt /= pt.at<float>(3);
@@ -236,7 +235,7 @@ void Init::processFrames(Map& m) {
                         int k = rPointsIdx[j];
                         double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         float eDistance = euclideanDistance(rPoints[j], keypoints2[idx]);
-                        if (distance <= 64 && eDistance <= 16) { 
+                        if (distance <= 128 && eDistance <= 128) { 
                             if (distance < minDistance) {
                                 minDistance = distance;
                                 mPoint = k;
@@ -287,7 +286,7 @@ void Init::processFrames(Map& m) {
 
                 temp.push_back(goodMatches[i]);
 
-                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
+                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 50) {
                     Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx));
                     pt->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
@@ -303,11 +302,13 @@ void Init::processFrames(Map& m) {
 
         goodMatches = temp;
         std::cout << "good matches after tests:   " << goodMatches.size() << std::endl;
+        
+        int iterations = 2;
 
-        if (frames.size() % 20 == 0 && frames.size() > 0) {
+        if (frames.size() % iterations == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
-            optimizer.BundleAdjustment(m, 20, 20);
+            optimizer.BundleAdjustment(m, 10, iterations);
         }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);
