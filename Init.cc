@@ -1,7 +1,6 @@
 #include "Init.h"
 
 void threadBA(Optimizer& opt, Map& m, int iter);
-float euclideanDistance(cv::Point2f pt1, cv::KeyPoint pt2); 
 
 void Init::triangulate(const cv::KeyPoint& keypoints1, const cv::KeyPoint& keypoints2, cv::Mat& P1, cv::Mat& P2, cv::Mat& points3d) {
     cv::Mat A(4,4, CV_32F);
@@ -75,6 +74,7 @@ Init::Init(cv::VideoCapture& _cap, const int _nfeatures, const int _thold, float
 void Init::extractKeyPoints(cv::Mat frame, std::vector<cv::KeyPoint>& keypoints, cv::Mat& descriptors) {
     cv::cvtColor(frame, frame, cv::COLOR_BGR2GRAY);
     detector->detect(frame, keypoints);
+    //cv::goodFeaturesToTrack(frame, keypoints, 3000, 0.01f, 7);
     desc->compute(frame, keypoints, descriptors);
 }
 
@@ -206,6 +206,8 @@ void Init::processFrames(Map& m) {
             cv::Mat kf = keyframe->getPose().inv();
             cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
             pt = K4x4 * kf * pt; 
+
+            // projecting homogeneous coords to euclidean
             pt /= pt.at<float>(3);
             //if (pt.at<float>(2) <= 0) continue;
             pt /= pt.at<float>(2);
@@ -235,13 +237,16 @@ void Init::processFrames(Map& m) {
                         int k = rPointsIdx[j];
                         double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         float eDistance = euclideanDistance(rPoints[j], keypoints2[idx]);
-                        if (distance <= 128 && eDistance <= 128) { 
+                        if (distance <= 128 && eDistance <= 16) { 
                             if (distance < minDistance) {
                                 minDistance = distance;
                                 mPoint = k;
                                 mIdx = j;
                             }
                             flag = true;
+                        } else {
+                            //if (eDistance <= 16)
+                            //    std::cout << "Distance: " << distance << " Euclid: " << eDistance << std::endl;
                         }
                     }
                     if (flag) {
@@ -303,7 +308,7 @@ void Init::processFrames(Map& m) {
         goodMatches = temp;
         std::cout << "good matches after tests:   " << goodMatches.size() << std::endl;
         
-        int iterations = 2;
+        int iterations = 10;
 
         if (frames.size() % iterations == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
@@ -380,10 +385,10 @@ bool Init::reprojErr(float kpx, float kpy, float cx, float cy, float f, cv::Mat 
     else return false;
 }
 
-void threadBA(Optimizer& opt, Map& m, int iter) {
-    opt.BundleAdjustment(m, iter, 0);
+float Init::euclideanDistance(cv::Point2f pt1, cv::KeyPoint pt2) {
+    return sqrt(pow(pt1.x - pt2.pt.x, 2) + pow(pt1.y - pt2.pt.y, 2));
 }
 
-float euclideanDistance(cv::Point2f pt1, cv::KeyPoint pt2) {
-    return sqrt(pow(pt1.x - pt2.pt.x, 2) + pow(pt1.y - pt2.pt.y, 2));
+void threadBA(Optimizer& opt, Map& m, int iter) {
+    opt.BundleAdjustment(m, iter, 0);
 }

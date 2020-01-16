@@ -30,7 +30,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         std::vector<KeyFrame*> tempFrames = m.getFrames();
 
         points = m.getPoints();
-        frames = {tempFrames.end() - slice - 1, tempFrames.end()};
+        frames = {tempFrames.end() - slice, tempFrames.end()};
     }
 
     std::cout << "Points: " << points.size() << " Frames: " << frames.size() << std::endl;
@@ -42,9 +42,10 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
-        SE3->setEstimate(toSE3Quat(kf->getPose().inv()));
+        SE3->setEstimate(toSE3Quat(kf->getPose()));
         SE3->setId(kf->id);
-        SE3->setFixed(kf->id <= 1);
+        //SE3->setFixed(kf->id <= 1);
+        //SE3->setFixed(i <= 1);
         optimizer.addVertex(SE3);
         if (kf->id > maxId) maxId = kf->id;
     }
@@ -118,7 +119,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(kf->id));
         g2o::SE3Quat SE3quat = SE3->estimate();
-        kf->setPose(toCvMat(SE3quat));
+        kf->setPose(toCvMat(SE3quat).inv());
     }
 
     // Points
