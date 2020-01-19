@@ -93,9 +93,11 @@ void Map::prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d) {
     }
     for (auto pt : getPoints()) {
         std::vector<float> xyz = pt->getCoords();
+        std::vector<float> color = pt->getColor();
         p3D.push_back(xyz[0]);
         p3D.push_back(-xyz[1]);
         p3D.push_back(-xyz[2]);
+        p3D.insert(p3D.end(), color.begin(), color.end());
     }
 }
 
@@ -153,8 +155,11 @@ void Map::run() {
         glBindBuffer(GL_ARRAY_BUFFER, pointsBuffer);
         glBufferData(GL_ARRAY_BUFFER, p3D.size() * sizeof(float), &p3D.front(), GL_DYNAMIC_DRAW);
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
 
@@ -220,7 +225,7 @@ void Map::run() {
         glBindVertexArray(pointsArray);
 
         // Draw points
-        glDrawArrays(GL_POINTS, 0, p3D.size() / 3);
+        glDrawArrays(GL_POINTS, 0, p3D.size() / 6);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         

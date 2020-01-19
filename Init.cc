@@ -190,7 +190,7 @@ void Init::processFrames(Map& m) {
             keyframe->setPose(frames.back()->getPose() * QQ);
 
         float th = keyframe->getPose().at<float>(2,3);
-        std::cout << th << std::endl;
+        std::cout << "Threshold:                  " << th << std::endl;
         //std::cout << cv::format(poseTest.back(), cv::Formatter::FMT_PYTHON) << std::endl;
         P2 = K*P2;
 
@@ -202,7 +202,7 @@ void Init::processFrames(Map& m) {
         // reproject map points
         for (int i = 0; i < points.size(); ++i) {
             std::vector<float> xyz = points[i]->getCoords();
-            if (xyz[2] < th) continue;
+            if (xyz[2] < th || cv::norm(xyz[2] - th) > 20) continue;
             cv::Mat kf = keyframe->getPose().inv();
             cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
             pt = K4x4 * kf * pt; 
@@ -237,21 +237,18 @@ void Init::processFrames(Map& m) {
                         int k = rPointsIdx[j];
                         double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         float eDistance = euclideanDistance(rPoints[j], keypoints2[idx]);
-                        if (distance <= 128 && eDistance <= 16) { 
+                        if (distance <= 128 && eDistance <= 32) { 
                             if (distance < minDistance) {
                                 minDistance = distance;
                                 mPoint = k;
                                 mIdx = j;
                             }
                             flag = true;
-                        } else {
-                            //if (eDistance <= 16)
-                            //    std::cout << "Distance: " << distance << " Euclid: " << eDistance << std::endl;
                         }
                     }
                     if (flag) {
                         points[mPoint]->addObservation(keyframe, keyframe->getKpSize());
-                        keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
+                        keyframe->addKeypoint(keypoints2[idx], points[mPoint]->id);
                         cnt++;
                         rPoints.erase(rPoints.begin() + mIdx);
                         rPointsIdx.erase(rPointsIdx.begin() + mIdx);
@@ -291,10 +288,12 @@ void Init::processFrames(Map& m) {
 
                 temp.push_back(goodMatches[i]);
 
-                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 50) {
-                    Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx));
+                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
+                    cv::Vec3b intensity = frame.at<cv::Vec3b>(keypoints2[idx].pt.x, keypoints2[idx].pt.y);
+                    std::vector<float> coords = {static_cast<float>(intensity.val[2]), static_cast<float>(intensity.val[1]), static_cast<float>(intensity.val[0])};
+                    Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx), coords);
                     pt->addObservation(keyframe, keyframe->getKpSize());
-                    keyframe->addKeypoint(keypoints2[idx], descriptors2.row(idx));
+                    keyframe->addKeypoint(keypoints2[idx], pt->id);
                     m.addPoint(pt);
                 }
             }
@@ -313,7 +312,7 @@ void Init::processFrames(Map& m) {
         if (frames.size() % iterations == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
-            optimizer.BundleAdjustment(m, 10, iterations);
+            optimizer.BundleAdjustment(m, 10, 0);
         }
 
         drawMatches(frame, keypoints1, keypoints2, goodMatches);

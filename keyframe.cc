@@ -3,12 +3,13 @@
 
 // Point
 
-Point::Point(int _id, float x, float y, float z, cv::Mat _desc) {
+Point::Point(int _id, float x, float y, float z, cv::Mat _desc, std::vector<float> _color) {
     xyz.push_back(x);
     xyz.push_back(y);
     xyz.push_back(z);
     id = _id;
     desc = _desc;
+    color = _color;
 }
 
 void Point::setCoords(float x, float y, float z) {
@@ -42,6 +43,13 @@ cv::Mat Point::getDesc() {
     return desc;
 }
 
+void Point::setColor(std::vector<float> _color) {
+    color = _color;
+}
+
+std::vector<float> Point::getColor() {
+    return color;
+}
 
 // KeyFrame
 
@@ -60,10 +68,10 @@ cv::Mat KeyFrame::getPose() {
     return pose.clone();
 }
 
-void KeyFrame::addKeypoint(cv::KeyPoint keypoint, cv::Mat _desc) {
+void KeyFrame::addKeypoint(cv::KeyPoint keypoint, int ptsId) {
     std::unique_lock<std::mutex> lock(mutexKeypoint);
     kp.push_back(keypoint);
-    desc.push_back(_desc);
+    pointsId.push_back(ptsId);
 }
 
 cv::KeyPoint KeyFrame::getKeypoint(int idx) {
@@ -95,4 +103,9 @@ cv::Mat KeyFrame::getRt() {
     cv::Mat ret;
     pose.rowRange(0,3).colRange(0,4).copyTo(ret);
     return ret;
+}
+
+std::vector<int> KeyFrame::getPointsId() {
+    std::unique_lock<std::mutex> lock(mutexKeypoint);
+    return pointsId;
 }
