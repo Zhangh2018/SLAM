@@ -217,9 +217,11 @@ void Init::processFrames(Map& m) {
             rPoints.push_back(cv::Point2f(pt.at<float>(0), pt.at<float>(1)));
         }
 
+        /* print to frame already used mappoints as red ones
         for (auto& pt : rPoints) {
             cv::circle(frame, pt, 3, cv::Scalar(0,0,255));
         }
+        */
 
         std::cout << "Points size: " << points.size() << std::endl << "rPoints size: " << rPoints.size() << std::endl;
 
@@ -289,9 +291,9 @@ void Init::processFrames(Map& m) {
                 temp.push_back(goodMatches[i]);
 
                 if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
-                    cv::Vec3b intensity = frame.at<cv::Vec3b>(keypoints2[idx].pt.x, keypoints2[idx].pt.y);
-                    std::vector<float> coords = {static_cast<float>(intensity.val[2]), static_cast<float>(intensity.val[1]), static_cast<float>(intensity.val[0])};
-                    Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx), coords);
+                    cv::Vec3b intensity = frame.at<cv::Vec3b>(cv::Point(keypoints2[idx].pt.x, keypoints2[idx].pt.y));
+                    std::vector<float> color = {static_cast<float>(intensity.val[2]) / 255, static_cast<float>(intensity.val[1]) / 255, static_cast<float>(intensity.val[0]) / 255};
+                    Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx), color);
                     pt->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(keypoints2[idx], pt->id);
                     m.addPoint(pt);

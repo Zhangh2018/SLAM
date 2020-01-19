@@ -31,10 +31,25 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
 
         points = m.getPoints();
         frames = {tempFrames.end() - slice, tempFrames.end()};
+        /* optimization try
+        std::vector<Point*> temp;
+        std::unordered_map<int, int> tempMap;
+        for (auto& kf : frames) {
+            std::vector<int> pointsId = kf->getPointsId;
+            for (auto& ptsId : pointsId) {
+                tempMap[ptsId] = 1;
+            }
+        }
+        for (auto& pt : points) {
+            if (tempMap.find(pt->id) != tempMap.end()) {
+                temp.push_back(pt);
+            }
+        }
+        points = temp;
+        */
     }
 
     std::cout << "Points: " << points.size() << " Frames: " << frames.size() << std::endl;
-
     
     int maxId = 0;
     // adding keyframes as vertices
@@ -44,8 +59,8 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
         SE3->setEstimate(toSE3Quat(kf->getPose()));
         SE3->setId(kf->id);
-        //SE3->setFixed(kf->id <= 1);
-        //SE3->setFixed(i <= 1);
+        SE3->setFixed(kf->id <= 1);
+        //SE3->setFixed(i <= 0);
         optimizer.addVertex(SE3);
         if (kf->id > maxId) maxId = kf->id;
     }
