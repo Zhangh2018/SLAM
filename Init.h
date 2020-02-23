@@ -10,7 +10,7 @@
 
 class Init {
 public:
-    Init(cv::VideoCapture& cap, const int nfeatures, const int thold, float H, float W);
+    Init(cv::VideoCapture& cap, cv::VideoCapture& cap1, const int nfeatures, const int thold, float H, float W);
     void process();
     void processFrames(Map& m);
     float H;
@@ -27,6 +27,7 @@ private:
     bool reprojErr(float kpx, float kpy, float cx, float cy, float f, cv::Mat point);
     // video wrapper
     cv::VideoCapture cap;
+    cv::VideoCapture cap1;
 
     cv::Ptr<cv::FeatureDetector> detector;
     cv::Ptr<cv::Feature2D> desc;

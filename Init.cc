@@ -57,8 +57,9 @@ void Init::decomposeE(const cv::Mat& E, cv::Mat& R, cv::Mat& t) {
         R = -R;
 }
 
-Init::Init(cv::VideoCapture& _cap, const int _nfeatures, const int _thold, float _H, float _W) {
+Init::Init(cv::VideoCapture& _cap, cv::VideoCapture& _cap1, const int _nfeatures, const int _thold, float _H, float _W) {
     cap = _cap;
+    cap1 = _cap1;
     nfeatures = _nfeatures;
     thold = _thold;
     detector = cv::FastFeatureDetector::create(thold);
@@ -87,9 +88,9 @@ void Init::process() {
 void Init::processFrames(Map& m) {
     //instrisic params
     float f, cx, cy;
-    f = 984.0f;
-    cx = W / 2.0f; //1280.0f * 0.75f / 2.0f;
-    cy = H / 2.0f; // cy = 720.0f * 0.75f / 2.0f;
+    f = 647.18f;
+    cx = W / 2.0f; 
+    cy = H / 2.0f;
 
     //intrinsic matrix
     cv::Mat K = cv::Mat::eye(3,3,CV_32F);
@@ -98,10 +99,6 @@ void Init::processFrames(Map& m) {
     K.at<float>(0,2) = cx;
     K.at<float>(1,2) = cy;
 
-    cv::Mat frame;
-    cap >> frame;
-    cv::resize(frame, frame, cv::Size(), 0.99, 0.99);
-
     std::vector<cv::KeyPoint> keypoints1, keypoints2;
     cv::Mat descriptors1, descriptors2;
     std::vector<std::vector<cv::DMatch>> matches;
@@ -109,9 +106,8 @@ void Init::processFrames(Map& m) {
     std::vector<cv::DMatch> goodMatches;
     std::vector<cv::Point2f> pMatches1, pMatches2;
     std::vector<uchar> mask;
-
-    extractKeyPoints(frame, keypoints1, descriptors1);
-    std::cout << keypoints1.size() << " " << descriptors1.rows << std::endl;
+    cv::Mat frame;
+    cv::Mat frame1;
 
     Optimizer optimizer;
     bool TRACKING = false;
@@ -122,12 +118,17 @@ void Init::processFrames(Map& m) {
         KeyFrame* keyframe = new KeyFrame(&K, frames.size());
         std::cout << "***** Frame: " << keyframe->id << " *****" << std::endl;
         cap >> frame;
+        cap1 >> frame1;
         if (frame.empty()) break;
+        if (frame1.empty()) break;
         cv::resize(frame, frame, cv::Size(), 0.99, 0.99);
- 
+        cv::resize(frame1, frame1, cv::Size(), 0.99, 0.99);
+
+        keypoints1.clear();
         keypoints2.clear();
         matches.clear();
-        extractKeyPoints(frame, keypoints2, descriptors2);
+        extractKeyPoints(frame, keypoints1, descriptors1);
+        extractKeyPoints(frame1, keypoints2, descriptors2);
         matcher->knnMatch(descriptors1, descriptors2, matches, 2);
         std::cout << "keypoints1:                 " << keypoints1.size() << std::endl;
         std::cout << "keypoints2:                 " << keypoints2.size() << std::endl;
@@ -239,7 +240,7 @@ void Init::processFrames(Map& m) {
                         int k = rPointsIdx[j];
                         double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
                         float eDistance = euclideanDistance(rPoints[j], keypoints2[idx]);
-                        if (distance <= 128 && eDistance <= 32) { 
+                        if (distance <= 64 && eDistance <= 64) { 
                             if (distance < minDistance) {
                                 minDistance = distance;
                                 mPoint = k;
@@ -311,7 +312,7 @@ void Init::processFrames(Map& m) {
         
         int iterations = 10;
 
-        if (frames.size() % iterations == 0 && frames.size() > 0) {
+        if (false && frames.size() % iterations == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
             optimizer.BundleAdjustment(m, 10, 0);
