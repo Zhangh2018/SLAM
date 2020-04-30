@@ -2,6 +2,11 @@
 #define OPTIMIZER_H
 
 #include <Eigen/Dense>
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wall"
+#pragma GCC diagnostic ignored "-Wextra" 
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include "g2o/core/sparse_optimizer.h"
 #include "g2o/core/block_solver.h"
 #include "g2o/core/solver.h"
@@ -11,6 +16,7 @@
 #include "g2o/g2o/types/sba/types_six_dof_expmap.h"
 //#include "g2o/math_groups/se3quat.h"
 #include "g2o/solvers/structure_only/structure_only_solver.h"
+#pragma GCC diagnostic pop
 
 #include "map.h"
 

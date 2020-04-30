@@ -85,6 +85,43 @@ void Init::process() {
     m.run();
 }
 
+struct Matches {
+    std::vector<cv::KeyPoint> kp;
+    cv::Mat desc;
+    std::vector<cv::DMatch> mt;
+    std::vector<uchar> mask;
+};
+
+Matches* filterMatches(std::vector<cv::KeyPoint>& keypoints1,
+        std::vector<cv::KeyPoint>& keypoints2,
+        cv::Mat& descriptors1, cv::Mat& descriptors2,
+        std::vector<std::vector<cv::DMatch>>& matches, cv::Mat& F) {
+    std::vector<cv::Point2f> pMatches1, pMatches2;
+    std::vector<uchar> mask;
+    for (int i = 0; i < matches.size(); ++i) {
+        if (matches[i].size() < 2) break;
+        const float ratio = 0.75;
+        if (matches[i][0].distance < ratio * matches[i][1].distance) {
+            // collecting points for compute fundamental matrix
+            pMatches1.push_back(keypoints1[matches[i][0].queryIdx].pt);
+            pMatches2.push_back(keypoints2[matches[i][0].trainIdx].pt);
+        }
+    }
+    F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
+    std::vector<cv::KeyPoint> goodKeyPoints;
+    std::vector<cv::DMatch> match;
+    cv::Mat goodDesc;
+    for (int i = 0; i < mask.size(); i++) {
+        if (mask[i]) {
+            match.push_back(matches[i][0]);
+            goodKeyPoints.push_back(keypoints1[matches[i][0].queryIdx]);
+            goodDesc.push_back(descriptors1.row(i));
+        }
+    }
+    Matches* mt = new Matches{goodKeyPoints, goodDesc, match, mask};
+    return mt;
+}
+
 void Init::processFrames(Map& m) {
     //instrisic params
     float f, cx, cy;
@@ -99,15 +136,16 @@ void Init::processFrames(Map& m) {
     K.at<float>(0,2) = cx;
     K.at<float>(1,2) = cy;
 
-    std::vector<cv::KeyPoint> keypoints1, keypoints2;
+    std::vector<cv::KeyPoint> keypoints1, keypoints2, keypoints3, keypoints4;
     cv::Mat descriptors1, descriptors2;
     std::vector<std::vector<cv::DMatch>> matches;
 
-    std::vector<cv::DMatch> goodMatches;
     std::vector<cv::Point2f> pMatches1, pMatches2;
+    std::vector<cv::Point2f> goodPoints;
     std::vector<uchar> mask;
     cv::Mat frame;
     cv::Mat frame1;
+    Matches *goodMatchesPrev, *goodMatchesCurrent, *goodMatches;
 
     Optimizer optimizer;
     bool TRACKING = false;
@@ -119,49 +157,57 @@ void Init::processFrames(Map& m) {
         std::cout << "***** Frame: " << keyframe->id << " *****" << std::endl;
         cap >> frame;
         cap1 >> frame1;
-        if (frame.empty()) break;
-        if (frame1.empty()) break;
+        if (frame.empty() || frame1.empty()) break;
         cv::resize(frame, frame, cv::Size(), 0.99, 0.99);
         cv::resize(frame1, frame1, cv::Size(), 0.99, 0.99);
 
         keypoints1.clear();
         keypoints2.clear();
         matches.clear();
-        extractKeyPoints(frame, keypoints1, descriptors1);
+        extractKeyPoints(frame,  keypoints1, descriptors1);
         extractKeyPoints(frame1, keypoints2, descriptors2);
         matcher->knnMatch(descriptors1, descriptors2, matches, 2);
         std::cout << "keypoints1:                 " << keypoints1.size() << std::endl;
         std::cout << "keypoints2:                 " << keypoints2.size() << std::endl;
         std::cout << "matches:                    " << matches.size() << std::endl;
 
-        // for some reason working better without normalizarion
-        //cv::Mat T1, T2;
-        //normalize(keypoints1, keypoints1, T1);
-        //normalize(keypoints2, keypoints2, T2);
+        cv::Mat F;
+        goodMatchesCurrent = filterMatches(keypoints1, keypoints2,
+                descriptors1, descriptors2, matches, F);
 
-        goodMatches.clear();
-        pMatches1.clear(); pMatches2.clear();
-        // Lowe's ratio test
-        for (int i = 0; i < matches.size(); ++i) {
-            if (matches[i].size() < 2) break;
-            const float ratio = 0.75;
-            if (matches[i][0].distance < ratio * matches[i][1].distance) {
-                goodMatches.push_back(matches[i][0]);
-                // collecting points for compute fundamental matrix
-                pMatches1.push_back(keypoints1[matches[i][0].queryIdx].pt);
-                pMatches2.push_back(keypoints2[matches[i][0].trainIdx].pt);
-            }
+        if (goodMatchesPrev == nullptr) {
+            goodMatchesPrev = goodMatchesCurrent;
+            continue;
         }
-        std::cout << "good matches:               " << goodMatches.size() << std::endl;
-        mask.clear();
-        cv::Mat F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
+
+        /*
+        auto print = [&] (Matches match) {
+            for (int i = 0; i < match.kp.size(); i++) {
+                std::cout << match.kp[i].pt << std::endl;
+            }
+        };
+        print(goodMatchesPrev);
+        print(goodMatchesCurrent);
+        break;
+        */
+        matches.clear();
+        matcher->knnMatch(goodMatchesPrev->desc, goodMatchesCurrent->desc, matches, 2);
+        Matches* goodMatches = filterMatches(goodMatchesPrev->kp, goodMatchesCurrent->kp,
+                goodMatchesPrev->desc, goodMatchesCurrent->desc, matches, F);
+
         F.convertTo(F, CV_32F);
-        //F = T2.t() * F * T1;
         cv::Mat E = K.t()*F*K;
         cv::Mat R, t;
         //decomposeE(E, R, t);
         E.convertTo(E, CV_64F);
-        cv::recoverPose(E, pMatches1, pMatches2, K, R, t, cv::noArray());
+        std::vector<cv::Point2f> kp1, kp2;
+        for (int i = 0; i < goodMatches->mask.size(); i++) {
+            if (goodMatches->mask[i]) {
+                kp1.push_back(goodMatchesPrev->kp[i].pt);
+                kp2.push_back(goodMatchesCurrent->kp[i].pt);
+            }
+        }
+        cv::recoverPose(E, kp1, kp2, K, R, t, cv::noArray());
         R.convertTo(R, CV_32F);
         t.convertTo(t, CV_32F);
         t /= 10;
@@ -203,7 +249,7 @@ void Init::processFrames(Map& m) {
         // reproject map points
         for (int i = 0; i < points.size(); ++i) {
             std::vector<float> xyz = points[i]->getCoords();
-            if (xyz[2] < th || cv::norm(xyz[2] - th) > 20) continue;
+            if (xyz[2] > th || cv::norm(xyz[2] - th) > 20) continue;
             cv::Mat kf = keyframe->getPose().inv();
             cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
             pt = K4x4 * kf * pt; 
@@ -228,77 +274,72 @@ void Init::processFrames(Map& m) {
 
         // mask is 1-d vector checking X'FX = 0
         int cnt = 0;
-        for (int i = 0; i < mask.size(); ++i) {
-            if (mask[i]) {
-                int idx = goodMatches[i].trainIdx;
-                if (!rPoints.empty()) {
-                    bool flag = false;
-                    double minDistance = DBL_MAX;
-                    int mPoint = 0; 
-                    int mIdx = 0;
-                    for (int j = 0; j < rPointsIdx.size(); j++)  {
-                        int k = rPointsIdx[j];
-                        double distance = cv::norm(points[k]->getDesc(), descriptors2.row(idx), cv::NORM_HAMMING); 
-                        float eDistance = euclideanDistance(rPoints[j], keypoints2[idx]);
-                        if (distance <= 64 && eDistance <= 64) { 
-                            if (distance < minDistance) {
-                                minDistance = distance;
-                                mPoint = k;
-                                mIdx = j;
-                            }
-                            flag = true;
+        for (int i = 0; i < goodMatches->kp.size(); ++i) {
+            if (!rPoints.empty()) {
+                bool flag = false;
+                double minDistance = DBL_MAX;
+                int mPoint = 0; 
+                int mIdx = 0;
+                for (int j = 0; j < rPointsIdx.size(); j++)  {
+                    int k = rPointsIdx[j];
+                    double distance = cv::norm(points[k]->getDesc(), goodMatches->desc.row(i), cv::NORM_HAMMING); 
+                    float eDistance = euclideanDistance(rPoints[j], goodMatches->kp[i]);
+                    if (distance <= 64 && eDistance <= 64) { 
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            mPoint = k;
+                            mIdx = j;
                         }
-                    }
-                    if (flag) {
-                        points[mPoint]->addObservation(keyframe, keyframe->getKpSize());
-                        keyframe->addKeypoint(keypoints2[idx], points[mPoint]->id);
-                        cnt++;
-                        rPoints.erase(rPoints.begin() + mIdx);
-                        rPointsIdx.erase(rPointsIdx.begin() + mIdx);
-                        continue;
+                        flag = true;
                     }
                 }
-                triangulate(keypoints1[goodMatches[i].queryIdx], keypoints2[goodMatches[i].trainIdx], P1, P2, s3DPoint);
-                // checking if coordinates goes to infinity
-                if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
-
-                // checking paralax
-                cv::Mat norm1 = s3DPoint - O1;
-                float dist1 = cv::norm(norm1);
-
-                cv::Mat norm2 = s3DPoint - O2;
-                float dist2 = cv::norm(norm2);
-
-                float cosParallax = norm1.dot(norm2) / (dist1 * dist2);
-
-                //if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
-
-                cv::Mat s3DPoint2 = R*s3DPoint + t;
-                //if (s3DPoint2.at<float>(2) <= 0) continue;
-                //if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
-
-                // coords for reprojection err
-                float kp1x = keypoints1[goodMatches[i].queryIdx].pt.x;
-                float kp1y = keypoints1[goodMatches[i].queryIdx].pt.y;
-                float kp2x = keypoints2[goodMatches[i].trainIdx].pt.x;
-                float kp2y = keypoints2[goodMatches[i].trainIdx].pt.y;
-
-                // Check reprojection error in first image
-                if (reprojErr(kp1x, kp1y, cx, cy, f, s3DPoint)) continue;
-
-                // Check reprojection error in second image
-                if (reprojErr(kp2x, kp2y, cx, cy, f, s3DPoint2)) continue;
-
-                temp.push_back(goodMatches[i]);
-
-                if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
-                    cv::Vec3b intensity = frame.at<cv::Vec3b>(cv::Point(keypoints2[idx].pt.x, keypoints2[idx].pt.y));
-                    std::vector<float> color = {static_cast<float>(intensity.val[2]) / 255, static_cast<float>(intensity.val[1]) / 255, static_cast<float>(intensity.val[0]) / 255};
-                    Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), descriptors2.row(idx), color);
-                    pt->addObservation(keyframe, keyframe->getKpSize());
-                    keyframe->addKeypoint(keypoints2[idx], pt->id);
-                    m.addPoint(pt);
+                if (flag) {
+                    points[mPoint]->addObservation(keyframe, keyframe->getKpSize());
+                    keyframe->addKeypoint(goodMatches->kp[i], points[mPoint]->id);
+                    cnt++;
+                    rPoints.erase(rPoints.begin() + mIdx);
+                    rPointsIdx.erase(rPointsIdx.begin() + mIdx);
+                    continue;
                 }
+            }
+            triangulate(goodMatchesPrev->kp[i], goodMatchesCurrent->kp[i], P1, P2, s3DPoint);
+            // checking if coordinates goes to infinity
+            if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
+
+            // checking paralax
+            cv::Mat norm1 = s3DPoint - O1;
+            float dist1 = cv::norm(norm1);
+
+            cv::Mat norm2 = s3DPoint - O2;
+            float dist2 = cv::norm(norm2);
+
+            float cosParallax = norm1.dot(norm2) / (dist1 * dist2);
+
+            //if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+
+            cv::Mat s3DPoint2 = R*s3DPoint + t;
+            //if (s3DPoint2.at<float>(2) <= 0) continue;
+            //if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+
+            // coords for reprojection err
+            float kp1x = goodMatchesPrev->kp[i].pt.x;
+            float kp1y = goodMatchesPrev->kp[i].pt.y;
+            float kp2x = goodMatchesCurrent->kp[i].pt.x;
+            float kp2y = goodMatchesCurrent->kp[i].pt.y;
+
+            // Check reprojection error in first image
+            if (reprojErr(kp1x, kp1y, cx, cy, f, s3DPoint)) continue;
+
+            // Check reprojection error in second image
+            if (reprojErr(kp2x, kp2y, cx, cy, f, s3DPoint2)) continue;
+
+            if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
+                cv::Vec3b intensity = frame.at<cv::Vec3b>(cv::Point(goodMatchesCurrent->kp[i].pt.x, goodMatchesCurrent->kp[i].pt.y));
+                std::vector<float> color = {static_cast<float>(intensity.val[2]) / 255, static_cast<float>(intensity.val[1]) / 255, static_cast<float>(intensity.val[0]) / 255};
+                Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), goodMatchesCurrent->desc.row(i), color);
+                pt->addObservation(keyframe, keyframe->getKpSize());
+                keyframe->addKeypoint(goodMatchesCurrent->kp[i], pt->id);
+                m.addPoint(pt);
             }
         }
         std::cout << "Number of map points:       " << m.getPointsSize() << std::endl;
@@ -307,8 +348,7 @@ void Init::processFrames(Map& m) {
         //if (keyframe->getKpSize() < 100) keyframe->bad = true;
         m.addFrame(keyframe);
 
-        goodMatches = temp;
-        std::cout << "good matches after tests:   " << goodMatches.size() << std::endl;
+        std::cout << "good matches after tests:   " << goodMatches->mt.size() << std::endl;
         
         int iterations = 10;
 
@@ -318,21 +358,20 @@ void Init::processFrames(Map& m) {
             optimizer.BundleAdjustment(m, 10, 0);
         }
 
-        drawMatches(frame, keypoints1, keypoints2, goodMatches);
+        drawMatches(frame, goodMatchesPrev->kp, goodMatchesCurrent->kp, goodMatches->mt);
+        goodMatchesPrev = goodMatchesCurrent;
         m.setCVFrame(frame);
-        keypoints1 = keypoints2;
-        descriptors1 = descriptors2;
 
         //char c = (char)cv::waitKey(25);
         //if (c == 27) break;
     }
 }
 
-void Init::drawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints_1, std::vector<cv::KeyPoint>& keypoints_2, std::vector<
+void Init::drawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints1, std::vector<cv::KeyPoint>& keypoints2, std::vector<
 cv::DMatch>& matches) {
     for (int i = 0; i < matches.size(); i++) {
-        cv::Point2f coord1 = keypoints_1[matches[i].queryIdx].pt;
-        cv::Point2f coord2 = keypoints_2[matches[i].trainIdx].pt;
+        cv::Point2f coord1 = keypoints1[matches[i].queryIdx].pt;
+        cv::Point2f coord2 = keypoints2[matches[i].trainIdx].pt;
 
         cv::circle(frame, coord1, 3, cv::Scalar(0,255,0));
         cv::circle(frame, coord2, 3, cv::Scalar(0,255,0));
