@@ -94,12 +94,12 @@ struct Matches {
 
 Matches* filterMatches(std::vector<cv::KeyPoint>& keypoints1,
         std::vector<cv::KeyPoint>& keypoints2,
-        cv::Mat& descriptors1, cv::Mat& descriptors2,
+        cv::Mat& descriptors,
         std::vector<std::vector<cv::DMatch>>& matches, cv::Mat& F) {
     std::vector<cv::Point2f> pMatches1, pMatches2;
     std::vector<uchar> mask;
     std::vector<cv::DMatch> goodMatchesTemp, goodMatches;
-    for (int i = 0; i < matches.size(); ++i) {
+    for (size_t i = 0; i < matches.size(); ++i) {
         if (matches[i].size() < 2) break;
         const float ratio = 0.75;
         if (matches[i][0].distance < ratio * matches[i][1].distance) {
@@ -110,14 +110,12 @@ Matches* filterMatches(std::vector<cv::KeyPoint>& keypoints1,
         }
     }
     F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
-    std::vector<cv::KeyPoint> goodKeyPoints;
-    cv::Mat goodDesc;
-    for (int i = 0; i < mask.size(); i++) {
+    for (size_t i = 0; i < mask.size(); i++) {
         if (mask[i]) {
             goodMatches.push_back(goodMatchesTemp[i]);
         }
     }
-    Matches* mt = new Matches{keypoints1, descriptors1, goodMatches, mask};
+    Matches* mt = new Matches{keypoints1, descriptors, goodMatches, mask};
     return mt;
 }
 
@@ -172,7 +170,7 @@ void Init::processFrames(Map& m) {
 
         cv::Mat F;
         goodMatchesCurrent = filterMatches(keypoints1, keypoints2,
-                descriptors1, descriptors2, matches, F);
+                descriptors1, matches, F);
 
         if (goodMatchesPrev == nullptr) {
             goodMatchesPrev = goodMatchesCurrent;
@@ -181,8 +179,9 @@ void Init::processFrames(Map& m) {
 
         matches.clear();
         matcher->knnMatch(goodMatchesPrev->desc, goodMatchesCurrent->desc, matches, 2);
-        Matches* goodMatches = filterMatches(goodMatchesPrev->kp, goodMatchesCurrent->kp,
-                goodMatchesPrev->desc, goodMatchesCurrent->desc, matches, F);
+        delete(goodMatches);
+        goodMatches = filterMatches(goodMatchesPrev->kp, goodMatchesCurrent->kp,
+                goodMatchesPrev->desc, matches, F);
 
         F.convertTo(F, CV_32F);
         cv::Mat E = K.t()*F*K;
@@ -190,7 +189,7 @@ void Init::processFrames(Map& m) {
         //decomposeE(E, R, t);
         E.convertTo(E, CV_64F);
         std::vector<cv::Point2f> kp1, kp2;
-        for (int i = 0; i < goodMatches->mask.size(); i++) {
+        for (size_t i = 0; i < goodMatches->mask.size(); i++) {
             if (goodMatches->mask[i]) {
                 kp1.push_back(goodMatchesPrev->kp[i].pt);
                 kp2.push_back(goodMatchesCurrent->kp[i].pt);
@@ -236,7 +235,7 @@ void Init::processFrames(Map& m) {
         std::vector<int> rPointsIdx;
 
         // reproject map points
-        for (int i = 0; i < points.size(); ++i) {
+        for (size_t i = 0; i < points.size(); ++i) {
             std::vector<float> xyz = points[i]->getCoords();
             if (xyz[2] > th || cv::norm(xyz[2] - th) > 20) continue;
             cv::Mat kf = keyframe->getPose().inv();
@@ -263,13 +262,13 @@ void Init::processFrames(Map& m) {
 
         // mask is 1-d vector checking X'FX = 0
         int cnt = 0;
-        for (int i = 0; i < goodMatches->kp.size(); ++i) {
+        for (size_t i = 0; i < goodMatches->kp.size(); ++i) {
             if (!rPoints.empty()) {
                 bool flag = false;
                 double minDistance = DBL_MAX;
                 int mPoint = 0; 
                 int mIdx = 0;
-                for (int j = 0; j < rPointsIdx.size(); j++)  {
+                for (size_t j = 0; j < rPointsIdx.size(); j++)  {
                     int k = rPointsIdx[j];
                     double distance = cv::norm(points[k]->getDesc(), goodMatches->desc.row(i), cv::NORM_HAMMING); 
                     float eDistance = euclideanDistance(rPoints[j], goodMatches->kp[i]);
@@ -303,12 +302,11 @@ void Init::processFrames(Map& m) {
             float dist2 = cv::norm(norm2);
 
             float cosParallax = norm1.dot(norm2) / (dist1 * dist2);
-
-            //if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+            if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
             cv::Mat s3DPoint2 = R*s3DPoint + t;
-            //if (s3DPoint2.at<float>(2) <= 0) continue;
-            //if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
+            if (s3DPoint2.at<float>(2) <= 0) continue;
+            if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
             // coords for reprojection err
             float kp1x = goodMatchesPrev->kp[i].pt.x;
@@ -359,7 +357,7 @@ void Init::processFrames(Map& m) {
 
 void Init::drawMatches(cv::Mat& frame, std::vector<cv::KeyPoint>& keypoints1, std::vector<cv::KeyPoint>& keypoints2, std::vector<
 cv::DMatch>& matches) {
-    for (int i = 0; i < matches.size(); i++) {
+    for (size_t i = 0; i < matches.size(); i++) {
         cv::Point2f coord1 = keypoints1[matches[i].queryIdx].pt;
         cv::Point2f coord2 = keypoints2[matches[i].trainIdx].pt;
 
@@ -373,10 +371,10 @@ cv::DMatch>& matches) {
 void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint>& normalizedPoints, cv::Mat& T) {
 
     float mX = 0, mY = 0, d = 0;
-    const int N = points.size();
+    const size_t N = points.size();
     normalizedPoints.resize(N);
 
-    for (int i = 0; i < N; ++i) {
+    for (size_t i = 0; i < N; ++i) {
         mX += points[i].pt.x;
         mY += points[i].pt.y;
     }
@@ -384,7 +382,7 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
     mX /= N;
     mY /= N;
 
-    for (int i = 0; i < N; ++i) {
+    for (size_t i = 0; i < N; ++i) {
         normalizedPoints[i].pt.x = points[i].pt.x - mX;
         normalizedPoints[i].pt.y = points[i].pt.y - mY;
         //d += std::sqrt(pow(normalizedPoints[i].pt.x, 2) + pow(normalizedPoints[i].pt.y, 2));
@@ -392,7 +390,7 @@ void Init::normalize(std::vector<cv::KeyPoint>& points, std::vector<cv::KeyPoint
 
     d = std::sqrt(2) * N / d;
      
-    for (int i = 0; i < N; ++i) {
+    for (size_t i = 0; i < N; ++i) {
         normalizedPoints[i].pt.x *= d; 
         normalizedPoints[i].pt.y *= d;
     }
