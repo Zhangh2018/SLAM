@@ -98,10 +98,12 @@ Matches* filterMatches(std::vector<cv::KeyPoint>& keypoints1,
         std::vector<std::vector<cv::DMatch>>& matches, cv::Mat& F) {
     std::vector<cv::Point2f> pMatches1, pMatches2;
     std::vector<uchar> mask;
+    std::vector<cv::DMatch> goodMatchesTemp, goodMatches;
     for (int i = 0; i < matches.size(); ++i) {
         if (matches[i].size() < 2) break;
         const float ratio = 0.75;
         if (matches[i][0].distance < ratio * matches[i][1].distance) {
+            goodMatchesTemp.push_back(matches[i][0]);
             // collecting points for compute fundamental matrix
             pMatches1.push_back(keypoints1[matches[i][0].queryIdx].pt);
             pMatches2.push_back(keypoints2[matches[i][0].trainIdx].pt);
@@ -109,16 +111,13 @@ Matches* filterMatches(std::vector<cv::KeyPoint>& keypoints1,
     }
     F = cv::findFundamentalMat(pMatches1, pMatches2, mask, cv::FM_RANSAC, 3.0f, 0.99f);
     std::vector<cv::KeyPoint> goodKeyPoints;
-    std::vector<cv::DMatch> match;
     cv::Mat goodDesc;
     for (int i = 0; i < mask.size(); i++) {
         if (mask[i]) {
-            match.push_back(matches[i][0]);
-            goodKeyPoints.push_back(keypoints1[matches[i][0].queryIdx]);
-            goodDesc.push_back(descriptors1.row(i));
+            goodMatches.push_back(goodMatchesTemp[i]);
         }
     }
-    Matches* mt = new Matches{goodKeyPoints, goodDesc, match, mask};
+    Matches* mt = new Matches{keypoints1, descriptors1, goodMatches, mask};
     return mt;
 }
 
@@ -180,16 +179,6 @@ void Init::processFrames(Map& m) {
             continue;
         }
 
-        /*
-        auto print = [&] (Matches match) {
-            for (int i = 0; i < match.kp.size(); i++) {
-                std::cout << match.kp[i].pt << std::endl;
-            }
-        };
-        print(goodMatchesPrev);
-        print(goodMatchesCurrent);
-        break;
-        */
         matches.clear();
         matcher->knnMatch(goodMatchesPrev->desc, goodMatchesCurrent->desc, matches, 2);
         Matches* goodMatches = filterMatches(goodMatchesPrev->kp, goodMatchesCurrent->kp,
@@ -359,6 +348,7 @@ void Init::processFrames(Map& m) {
         }
 
         drawMatches(frame, goodMatchesPrev->kp, goodMatchesCurrent->kp, goodMatches->mt);
+        delete(goodMatchesPrev);
         goodMatchesPrev = goodMatchesCurrent;
         m.setCVFrame(frame);
 
