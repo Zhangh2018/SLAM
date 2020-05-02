@@ -323,7 +323,7 @@ void Init::processFrames(Map& m) {
             if (s3DPoint.at<float>(2) > th && cv::norm(s3DPoint.at<float>(2) - th) < 20) {
                 cv::Vec3b intensity = frame.at<cv::Vec3b>(cv::Point(goodMatchesCurrent->kp[i].pt.x, goodMatchesCurrent->kp[i].pt.y));
                 std::vector<float> color = {static_cast<float>(intensity.val[2]) / 255, static_cast<float>(intensity.val[1]) / 255, static_cast<float>(intensity.val[0]) / 255};
-                Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), goodMatchesCurrent->desc.row(i), color);
+                Point* pt = new Point(m.getPointsSize(), s3DPoint.at<float>(0,0), s3DPoint.at<float>(1,0), s3DPoint.at<float>(2,0), goodMatches->desc.row(i), color);
                 pt->addObservation(keyframe, keyframe->getKpSize());
                 keyframe->addKeypoint(goodMatchesCurrent->kp[i], pt->id);
                 m.addPoint(pt);
