@@ -305,7 +305,7 @@ void Init::processFrames(Map& m) {
             if (s3DPoint.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
             cv::Mat s3DPoint2 = R*s3DPoint + t;
-            if (s3DPoint2.at<float>(2) <= 0) continue;
+            //if (s3DPoint2.at<float>(2) <= 0) continue;
             if (s3DPoint2.at<float>(2,0) <= 0 && cosParallax < 0.99998) continue;
 
             // coords for reprojection err
@@ -337,9 +337,9 @@ void Init::processFrames(Map& m) {
 
         std::cout << "good matches after tests:   " << goodMatches->mt.size() << std::endl;
         
-        int iterations = 10;
+        int iterations = 30;
 
-        if (false && frames.size() % iterations == 0 && frames.size() > 0) {
+        if (frames.size() % iterations == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
             //t1.join();
             optimizer.BundleAdjustment(m, 10, 0);

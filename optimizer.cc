@@ -53,7 +53,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
     
     int maxId = 0;
     // adding keyframes as vertices
-    for (int i = 0; i < frames.size(); i++) {
+    for (size_t i = 0; i < frames.size(); i++) {
         KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
@@ -69,7 +69,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
     std::vector<int> ptsIdx;
     
     // adding points as vertices
-    for (int i = 0; i < points.size(); i++) {
+    for (size_t i = 0; i < points.size(); i++) {
         Point* pt  = points[i];
         g2o::VertexSBAPointXYZ* Point = new g2o::VertexSBAPointXYZ();
         std::vector<float> coords = pt->getCoords();
@@ -129,7 +129,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
     // Update with optimized data
 
     // Keyframes
-    for (int i = 0; i < frames.size(); i++) {
+    for (size_t i = 0; i < frames.size(); i++) {
         KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(kf->id));
@@ -138,7 +138,7 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
     }
 
     // Points
-    for (int i = 0; i < ptsIdx.size(); i++) {
+    for (size_t i = 0; i < ptsIdx.size(); i++) {
         int idx = ptsIdx[i];
         Point* pt = points[idx];
         g2o::VertexSBAPointXYZ* Point = static_cast<g2o::VertexSBAPointXYZ*>(optimizer.vertex(pt->id + maxId + 1));
