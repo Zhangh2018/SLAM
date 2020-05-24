@@ -210,6 +210,7 @@ void Init::processFrames(Map& m) {
         R.copyTo(P2.rowRange(0,3).colRange(0,3));
         t.copyTo(P2.rowRange(0,3).col(3));
         cv::Mat O2 = -R.t()*t;
+        std::cout << O2 << std::endl;
 
         cv::Mat QQ = cv::Mat::eye(4,4,CV_32F);
         R.copyTo(QQ.rowRange(0,3).colRange(0,3));
@@ -237,33 +238,41 @@ void Init::processFrames(Map& m) {
         // reproject map points
         for (size_t i = 0; i < points.size(); ++i) {
             std::vector<float> xyz = points[i]->getCoords();
-            if (xyz[2] > th || cv::norm(xyz[2] - th) > 20) continue;
+            //if (xyz[2] < th || cv::norm(xyz[2] - th) > 20) continue;
             cv::Mat kf = keyframe->getPose().inv();
             cv::Mat pt = (cv::Mat_<float>(4,1) << xyz[0], xyz[1], xyz[2], 1);
-            pt = K4x4 * kf * pt; 
+            pt = K4x4 * kf * pt;  
 
             // projecting homogeneous coords to euclidean
             pt /= pt.at<float>(3);
             //if (pt.at<float>(2) <= 0) continue;
             pt /= pt.at<float>(2);
-            if (pt.at<float>(0) <= 0 || pt.at<float>(0) >= W ||
-                pt.at<float>(1) <= 0 || pt.at<float>(1) >= H) continue;
+            //if (pt.at<float>(0) <= 0 || pt.at<float>(0) >= W ||
+            //    pt.at<float>(1) <= 0 || pt.at<float>(1) >= H) continue;
             rPointsIdx.push_back(i);
             rPoints.push_back(cv::Point2f(pt.at<float>(0), pt.at<float>(1)));
         }
 
-        /* print to frame already used mappoints as red ones
+        // print to frame already used mappoints as red ones
         for (auto& pt : rPoints) {
             cv::circle(frame, pt, 3, cv::Scalar(0,0,255));
         }
-        */
+        //*/
 
         std::cout << "Points size: " << points.size() << std::endl << "rPoints size: " << rPoints.size() << std::endl;
 
         // mask is 1-d vector checking X'FX = 0
-        int cnt = 0;
-        for (size_t i = 0; i < goodMatches->kp.size(); ++i) {
+        int countMappedPoints = 0;
+        int countNewPoints = 0;
+        float averageDistance = 0;
+        float averageEuclidianDistance = 0;
+        float aD = 0;
+        float aED = 0;
+        int distanceCnt = 0;
+        for (size_t i = 0; i < goodMatches->mask.size(); ++i) {
+            if (!goodMatches->mask[i]) continue;
             if (!rPoints.empty()) {
+                distanceCnt++;
                 bool flag = false;
                 double minDistance = DBL_MAX;
                 int mPoint = 0; 
@@ -272,7 +281,9 @@ void Init::processFrames(Map& m) {
                     int k = rPointsIdx[j];
                     double distance = cv::norm(points[k]->getDesc(), goodMatches->desc.row(i), cv::NORM_HAMMING); 
                     float eDistance = euclideanDistance(rPoints[j], goodMatches->kp[i]);
-                    if (distance <= 64 && eDistance <= 64) { 
+                    averageDistance += distance;
+                    averageEuclidianDistance += eDistance;
+                    if (distance <= 64 && eDistance <= 128) { 
                         if (distance < minDistance) {
                             minDistance = distance;
                             mPoint = k;
@@ -281,15 +292,19 @@ void Init::processFrames(Map& m) {
                         flag = true;
                     }
                 }
+                averageDistance /= rPointsIdx.size();
+                averageEuclidianDistance /= rPointsIdx.size();
                 if (flag) {
                     points[mPoint]->addObservation(keyframe, keyframe->getKpSize());
                     keyframe->addKeypoint(goodMatches->kp[i], points[mPoint]->id);
-                    cnt++;
+                    countMappedPoints++;
                     rPoints.erase(rPoints.begin() + mIdx);
                     rPointsIdx.erase(rPointsIdx.begin() + mIdx);
                     continue;
                 }
             }
+            aD += averageDistance;
+            aED += averageEuclidianDistance;
             triangulate(goodMatchesPrev->kp[i], goodMatchesCurrent->kp[i], P1, P2, s3DPoint);
             // checking if coordinates goes to infinity
             if (!std::isfinite(s3DPoint.at<float>(0,0)) || !std::isfinite(s3DPoint.at<float>(1,0)) || !std::isfinite(s3DPoint.at<float>(2,0))) continue;
@@ -327,17 +342,20 @@ void Init::processFrames(Map& m) {
                 pt->addObservation(keyframe, keyframe->getKpSize());
                 keyframe->addKeypoint(goodMatchesCurrent->kp[i], pt->id);
                 m.addPoint(pt);
+                countNewPoints++;
             }
         }
+        std::cout << "Distance: " << aD / distanceCnt << " Euclidian Distance: " << aED / distanceCnt << std::endl;
+        std::cout << "Number of mapped points:    " << countMappedPoints << std::endl;
+        std::cout << "Number of new map points:   " << countNewPoints << std::endl;
         std::cout << "Number of map points:       " << m.getPointsSize() << std::endl;
-        std::cout << "Number of added map points: " << cnt << std::endl;
 
         //if (keyframe->getKpSize() < 100) keyframe->bad = true;
         m.addFrame(keyframe);
 
         std::cout << "good matches after tests:   " << goodMatches->mt.size() << std::endl;
         
-        int iterations = 30;
+        int iterations = 50;
 
         if (frames.size() % iterations == 0 && frames.size() > 0) {
             //std::thread t1(threadBA, std::ref(optimizer), std::ref(m), 5);
