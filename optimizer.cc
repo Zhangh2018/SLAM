@@ -57,9 +57,9 @@ void Optimizer::BundleAdjustment(Map& m, int iter, int slice) {
         KeyFrame* kf = frames[i];
         if (kf->bad) continue;
         g2o::VertexSE3Expmap* SE3 = new g2o::VertexSE3Expmap();
-        SE3->setEstimate(toSE3Quat(kf->getPose()));
+        SE3->setEstimate(toSE3Quat(kf->getPose().inv()));
         SE3->setId(kf->id);
-        SE3->setFixed(kf->id <= 1);
+        SE3->setFixed(kf->id <= 0);
         //SE3->setFixed(i <= 0);
         optimizer.addVertex(SE3);
         if (kf->id > maxId) maxId = kf->id;
