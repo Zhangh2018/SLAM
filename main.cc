@@ -1,6 +1,6 @@
 #include <iostream>
 #include "Init.h"
-#include <thread> 
+#include <thread>
 
 int main(int argc, char* argv[]) {
     cv::VideoCapture cap("./../stereo/I1_%06d.png");
@@ -8,7 +8,7 @@ int main(int argc, char* argv[]) {
     int H = 0, W = 0;
     H = cap.get(cv::CAP_PROP_FRAME_HEIGHT);
     W = cap.get(cv::CAP_PROP_FRAME_WIDTH);
-    
+
     Init init(cap, cap1, 10000, 30, H, W);
     init.process();
 

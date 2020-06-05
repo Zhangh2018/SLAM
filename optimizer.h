@@ -4,7 +4,7 @@
 #include <Eigen/Dense>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wall"
-#pragma GCC diagnostic ignored "-Wextra" 
+#pragma GCC diagnostic ignored "-Wextra"
 #pragma GCC diagnostic ignored "-Wconversion"
 #pragma GCC diagnostic ignored "-Wpedantic"
 #include "g2o/core/sparse_optimizer.h"
@@ -20,10 +20,8 @@
 
 #include "map.h"
 
-
 class Optimizer {
-
-public:
+  public:
     void BundleAdjustment(Map& m, int iter, int slice);
 };
 

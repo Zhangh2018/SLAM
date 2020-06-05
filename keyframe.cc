@@ -1,9 +1,9 @@
 #include "keyframe.h"
 
-
 // Point
 
-Point::Point(int _id, float x, float y, float z, cv::Mat _desc, std::vector<float> _color) {
+Point::Point(int _id, float x, float y, float z, cv::Mat _desc,
+             std::vector<float> _color) {
     xyz.push_back(x);
     xyz.push_back(y);
     xyz.push_back(z);
@@ -39,17 +39,11 @@ std::map<KeyFrame*, int> Point::getObservations() {
     return obs;
 }
 
-cv::Mat Point::getDesc() {
-    return desc;
-}
+cv::Mat Point::getDesc() { return desc; }
 
-void Point::setColor(std::vector<float> _color) {
-    color = _color;
-}
+void Point::setColor(std::vector<float> _color) { color = _color; }
 
-std::vector<float> Point::getColor() {
-    return color;
-}
+std::vector<float> Point::getColor() { return color; }
 
 // KeyFrame
 
@@ -75,8 +69,8 @@ void KeyFrame::addKeypoint(cv::KeyPoint keypoint, int ptsId) {
 }
 
 cv::KeyPoint KeyFrame::getKeypoint(int idx) {
-     std::unique_lock<std::mutex> lock(mutexKeypoint);
-     return kp[idx];
+    std::unique_lock<std::mutex> lock(mutexKeypoint);
+    return kp[idx];
 }
 
 int KeyFrame::getKpSize() {
@@ -87,21 +81,21 @@ int KeyFrame::getKpSize() {
 cv::Mat KeyFrame::getRotation() {
     std::unique_lock<std::mutex> lock(mutexPose);
     cv::Mat ret;
-    pose.rowRange(0,3).colRange(0,3).copyTo(ret);
+    pose.rowRange(0, 3).colRange(0, 3).copyTo(ret);
     return ret;
 }
 
 cv::Mat KeyFrame::getTranslation() {
     std::unique_lock<std::mutex> lock(mutexPose);
     cv::Mat ret;
-    pose.rowRange(0,3).col(3).copyTo(ret);
+    pose.rowRange(0, 3).col(3).copyTo(ret);
     return ret;
 }
 
 cv::Mat KeyFrame::getRt() {
     std::unique_lock<std::mutex> lock(mutexPose);
     cv::Mat ret;
-    pose.rowRange(0,3).colRange(0,4).copyTo(ret);
+    pose.rowRange(0, 3).colRange(0, 4).copyTo(ret);
     return ret;
 }
 

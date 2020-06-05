@@ -3,7 +3,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/flann.hpp>
 #include <glm/glm.hpp>
-#include <iostream> 
+#include <iostream>
 #include <vector>
 #include <map>
 #include <mutex>
@@ -11,11 +11,12 @@
 class KeyFrame;
 
 class Point {
-public:
-    Point(int id, float x, float y, float z, cv::Mat desc, std::vector<float> color);
+  public:
+    Point(int id, float x, float y, float z, cv::Mat desc,
+          std::vector<float> color);
     int id;
 
-public:
+  public:
     void setCoords(float x, float y, float z);
     void setCoords(std::vector<float> xyz);
     std::vector<float> getCoords();
@@ -25,7 +26,7 @@ public:
     void setColor(std::vector<float> color);
     std::vector<float> getColor();
 
-private:
+  private:
     std::vector<float> xyz;
     std::vector<float> color;
     std::map<KeyFrame*, int> obs;
@@ -36,10 +37,9 @@ private:
 
 // make getters and setters
 class KeyFrame {
-
-public:
+  public:
     KeyFrame(cv::Mat* K, int id);
-    
+
     void setPose(cv::Mat pose);
     cv::Mat getPose();
     void addKeypoint(cv::KeyPoint kp, int ptsId);
@@ -50,12 +50,12 @@ public:
     cv::Mat getRt();
     std::vector<int> getPointsId();
 
-public:
+  public:
     cv::Mat* K;
     int id;
     bool bad = false;
 
-private:
+  private:
     cv::Mat pose;
     std::vector<cv::KeyPoint> kp;
     std::vector<int> pointsId;

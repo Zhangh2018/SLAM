@@ -1,7 +1,6 @@
 #ifndef MAP_H
 #define MAP_H
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <iostream>
@@ -19,10 +18,8 @@
 #include "shader.h"
 #include "keyframe.h"
 
-
 class Map {
-
-public:
+  public:
     Map(float H, float W);
     void run();
     void prepare(std::vector<float>& p3D, std::vector<glm::mat4>& pose3d);
@@ -40,7 +37,7 @@ public:
     float H;
     float W;
 
-private:
+  private:
     std::vector<KeyFrame*> frames;
     std::vector<Point*> points;
     cv::Mat cvFrame;
@@ -50,7 +47,7 @@ private:
     std::mutex mutexCVFrame;
 
     GLFWwindow* window;
-    Shader* ourShader; 
+    Shader* ourShader;
 };
 
-#endif 
+#endif
